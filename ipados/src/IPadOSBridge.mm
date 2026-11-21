@@ -179,7 +179,6 @@ void ConfigureWindow(void* sdlWindow) {
                     // and in a narrow Stage Manager pane; no maximum is set so
                     // the app can grow to the full screen.
                     scene.sizeRestrictions.minimumSize = CGSizeMake(640, 480);
-                    scene.sizeRestrictions.maximumSize = CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX);
                     g_multitasking = YES;
                 }
                 if (@available(iOS 13.4, *)) {
@@ -204,8 +203,9 @@ void ConfigureWindow(void* sdlWindow) {
             for (NSUInteger i = 0; i < titles.count; ++i) {
                 UIKeyCommand* cmd = [UIKeyCommand keyCommandWithInput:keys[i]
                                                        modifierFlags:UIKeyModifierCommand
-                                                              action:@selector(ipadosKeyCommand:)
-                                                  discoverabilityTitle:titles[i]];
+                                                              action:@selector(ipadosKeyCommand:)];
+                if (@available(iOS 13.0, *))
+                    cmd.discoverabilityTitle = titles[i];
                 [vc addKeyCommand:cmd];
             }
         }
