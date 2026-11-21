@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.10...3.22)
 
 project(CasioEmuMsvc)
 include(FetchContent)
+
+# Platform tag detection (cmake/CasioPlatform.cmake at the repository root).
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+include(CasioPlatform)
 #set(CMAKE_MESSAGE_LOG_LEVEL NOTICE)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -235,6 +239,12 @@ set(PROJECT_INCLUDE_DIRS
     ${MINIZ_DIR}
 )
 
+# PluginPackage.cpp uses Apple's CommonCrypto SHA-256 API.  On other targets
+# supply a byte-identical streaming SHA-256 shim from the build tree.
+if(NOT APPLE)
+    list(APPEND PROJECT_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/cmake/compat-commoncrypto")
+endif()
+
 # find_library(SDL2 SDL2)
 
 # find_library(SDL2_image SDL2_image)
@@ -252,6 +262,10 @@ file(GLOB MAIN_SOURCES_CHIPSET CONFIGURE_DEPENDS "${SOURCE_DIR}/Chipset/*.cpp")
 file(GLOB MAIN_SOURCES_EPS6800_CORE "${SOURCE_DIR}/Chipset/EPS6800Core/*.c")
 file(GLOB MAIN_SOURCES_CRASH "${SOURCE_DIR}/CrashHandler/*.cpp")
 file(GLOB MAIN_SOURCES_EXT "${SOURCE_DIR}/Ext/*.cpp" "${SOURCE_DIR}/Ext/*.mm")
+# Objective-C++ sources are macOS-only; no cross toolchain here supports .mm.
+if(NOT APPLE)
+    list(FILTER MAIN_SOURCES_EXT EXCLUDE REGEX "\\.mm$")
+endif()
 file(GLOB MAIN_SOURCES_EXT_CAM "${SOURCE_DIR}/Ext/cam/*.cc")
 file(GLOB MAIN_SOURCES_ROP "${SOURCE_DIR}/Rop/*.cpp")
 file(GLOB MAIN_SOURCES_GUI "${SOURCE_DIR}/Gui/*.cpp")
@@ -349,7 +363,24 @@ if(BUILD_EXECUTABLE)
     endif()
     
     if(WIN32)
-        set(WIN_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc)
+        if(MSVC)
+            set(WIN_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc)
+        else()
+            # MinGW windres cannot parse the UTF-16LE Visual Studio .rc.
+            # Convert a copy into the build tree and make resource.h / icons
+            # visible to the resource compiler.
+            set(WIN_RC_UTF8 "${CMAKE_CURRENT_BINARY_DIR}/Resource-utf8.rc")
+            add_custom_command(
+                OUTPUT "${WIN_RC_UTF8}"
+                COMMAND ${CMAKE_COMMAND}
+                    -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc
+                    -DOUTPUT=${WIN_RC_UTF8}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/convert_rc_utf8.cmake
+                DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc"
+                COMMENT "Converting Resource.rc to UTF-8 for windres")
+            set(WIN_RESOURCES "${WIN_RC_UTF8}")
+            set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}")
+        endif()
     endif()
 
     if(APPLE)
@@ -374,6 +405,10 @@ else()
     set(TARGET_NAME "main")
     add_library(${TARGET_NAME} SHARED ${MAIN_SOURCES})
 endif()
+
+# PlatformTags.h: "macos|linux|windows|android" x
+#                 "x64|x32|arm64|arm64-android|any" as C string literals.
+casioemu_apply_platform_tags(${TARGET_NAME})
 
 if(CASIOEMU_CORE_WEB)
     find_package(Python3 COMPONENTS Interpreter)
@@ -747,6 +782,13 @@ if(WIN32)
             "-static-libstdc++"
             "-static"
         )
+        # MinGW-w64 has no POSIX setenv()/dlfcn API.  Inject the setenv shim
+        # and a compat include dir rather than editing source files owned by
+        # other work streams.
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -include "${CMAKE_SOURCE_DIR}/cmake/win32-compat.h")
+        target_include_directories(${TARGET_NAME} BEFORE PRIVATE
+            "${CMAKE_SOURCE_DIR}/cmake/compat-win")
     endif()
     target_compile_definitions(${TARGET_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
@@ -962,3 +1004,17 @@ if(CASIOEMU_ENABLE_SENTRY AND NOT ANDROID AND NOT IOS AND NOT CASIOEMU_WEB)
         )
     endif()
 endif()
+
+# Test/helper binaries compile the same plugin sources, so give them the same
+# platform tags as the main target.  casioemu_apply_platform_tags() silently
+# skips targets that were not created on this platform.
+casioemu_apply_platform_tags(
+    casioemu_settings_smoke
+    casioemu_screen_thread_lifetime
+    casioemu_plugin_unload_fixture
+    casioemu_plugin_window_fixture
+    casioemu_plugin_badapi_fixture
+    casioemu_plugin_badabi_fixture
+    casioemu_plugin_loader_smoke
+    casioemu_plugin_registry_headless
+)
