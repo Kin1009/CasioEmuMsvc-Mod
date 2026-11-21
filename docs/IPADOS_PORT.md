@@ -39,6 +39,9 @@ cmake -S . -B build-ipados -G Ninja \
 cmake --build build-ipados --target CasioEmuMsvc
 ```
 
+The same configure/build/install sequence is wrapped in
+`ipados/build-ipados.sh [device-UDID]`.
+
 `CURL_*` flags are needed because the bundled curl FetchContent build otherwise
 picks up the **macOS Homebrew** OpenSSL/libidn2 and fails to link for iOS.
 TLS-backed online features are therefore unavailable in this verification
