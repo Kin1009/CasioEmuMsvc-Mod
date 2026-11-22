@@ -96,10 +96,10 @@
     }
   ],
   "wired_into_config": {
-    "flash_path": "os.bin",
-    "flash_path_sha256": "fb6f3933f52ee3181f15940ea3c542b381631a31a6517a9582b8db20a506ce31",
-    "rom_path": "",
-    "note": "Only the cleanly decoded primary image is wired as flash_path. No bootcode is wired."
+    "rom_path": "os.bin",
+    "rom_path_sha256": "fb6f3933f52ee3181f15940ea3c542b381631a31a6517a9582b8db20a506ce31",
+    "flash_path": "",
+    "note": "P0 fix: rom_path must be non-empty (SvgBoardModelLoader.cpp:683) and points to the genuine decoded OS image. flash_path is empty like the proven fx-CG50 pack. No bootcode is wired."
   },
   "pending": [
     "Obtain a proven bootcode file (not obtainable from installers; needs hardware dump or dumper add-in).",

@@ -7,8 +7,8 @@
   "real_hardware": true,
   "pd_value": 0,
   "interface_path": "interface.png",
-  "rom_path": "",
-  "flash_path": "os.bin",
+  "rom_path": "os.bin",
+  "flash_path": "",
   "ink_color": {
     "r": 0,
     "g": 0,
@@ -38,8 +38,12 @@
         "w": 640,
         "h": 1180
       }
+    },
+    "rsd_ann": {
+      "index": 0
     }
   },
+  "status": [],
   "buttons": [
     {
       "index": 0,
