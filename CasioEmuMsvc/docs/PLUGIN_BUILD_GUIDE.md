@@ -283,6 +283,29 @@ permission facade (`src/Plugin/PluginApi_Impl.cpp`); a denial is recorded with
 Declare the **narrowest** set that works — permissions are shown to the user at
 install time.
 
+### 8.1 Script plugin host API (`type: "script"`, `script_api: 1`)
+
+A script plugin receives a sandboxed `host` table; every entry is checked
+against the manifest permissions before it can run.  Missing host facilities
+never raise an error — the call returns `nil`/`false` and logs once.
+
+| `host` function | Required permission | Returns | Notes |
+|---|---|---|---|
+| `log(msg)`, `get_tick()` | none | — / integer | Rate-limited log; monotonic ms tick. |
+| `get_model()` | `emulator.read` | string | Running model name. |
+| `get_framebuffer_size()` | `emulator.read` | `w, h, pitch` or `nil` | Metadata only, never a pointer. |
+| `fb_get_info()` | `emulator.read` | table or `nil` | `{width,height,pitch}`. |
+| `reg_read(name)`, `mem_read8(addr)` | `emulator.read` | value(s) or `nil` | Debugger-backed. |
+| `mem_write8(addr, value)` | `emulator.write` | — | MMU-backed. |
+| `key_is_down(ki, ko)` | `emulator.read` | boolean | Live key matrix. |
+| `ui_add_window(title)` | `ui.shell` | — | Phase 1 logs the request. |
+| **`ui_add_button(win, label, cb)`** | `ui.shell` | button id or `false` | Keeps `cb` in the Lua registry; tapping re-enters the script with a fresh instruction budget. Returns `false` until script window UI is bound. |
+| **`arch_control(cmd [, arg])`** | `emulator.inject` (or `ui.shell`) | boolean | `cmd`: `reboot`, `reset`, `power_on`, `enter_diag` (`arg` = mode; `enter_diag(1)` also accepted). `reboot`/`reset` use `IDebugger::Reset`; `enter_diag` needs the native SH4 core and returns `false` until exposed via `PluginApi`. |
+| **`arch_status()`** | `emulator.read` | table or `nil` | `{running, paused, cycles, model, hw_id}` (`hardware_id` alias included). `cycles` is `0` when the host exposes no cycle counter. |
+
+`arch_register(desc)` (design doc §6, `emulator.inject`) is a separate
+architecture-provider registration entry point, not part of this table.
+
 ---
 
 ## 9. Native ABI contract (very important)

@@ -735,6 +735,42 @@ bool PluginRegistry::LoadScript(PluginEntry& entry) {
 	config.host.addWindow = [this, id = manifest.id](const std::string& title) {
 		LogLine("[script] " + id + ": window request '" + title + "'");
 	};
+	// Buttons need a real script-owned ImGui window (Phase 2).  Keep the
+	// registry-ref callback inside ScriptRuntime and degrade gracefully here.
+	config.host.addButton = [this, id = manifest.id](
+		const std::string& window, const std::string& label, std::function<void()>) -> int {
+		LogLine("[script] " + id + ": button '" + label + "' on window '" + window +
+			"' requested (script window UI is Phase 2)");
+		return 0;
+	};
+	// The permission-scoped plugin API exposes IDebugger::Reset for a real CPU
+	// reset.  The native SH4 "enter diag" macro lives on Emulator (not on
+	// IEmulator/PluginApi), so that command is reported as unsupported rather
+	// than faked.  Unknown commands are rejected by ScriptRuntime itself.
+	config.host.archControl = [this, id = manifest.id, debugger](
+		const std::string& command, int /*arg*/) -> bool {
+		if (command == "reboot" || command == "reset") {
+			if (!debugger)
+				return false;
+			debugger->Reset();
+			return true;
+		}
+		LogLine("[script] " + id + ": arch_control('" + command +
+			"') needs the native arch core (not exposed through PluginApi)");
+		return false;
+	};
+	config.host.archStatus = [emulator](ScriptArchStatus& out) -> bool {
+		if (!emulator)
+			return false;
+		out.running = !emulator->IsPaused();
+		out.paused = emulator->IsPaused();
+		out.cycles = 0; // no cycle counter is exposed by IEmulator/IDebugger
+		const char* name = emulator->GetRunningModelName();
+		out.model = name ? name : "";
+		const casioemu::ModelInfo* info = emulator->ModelDefinition();
+		out.hardwareId = info ? info->hardware_id : 0;
+		return true;
+	};
 
 	entry.scriptRuntime = std::make_shared<ScriptRuntime>(std::move(config));
 	std::string runtime_error;

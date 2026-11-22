@@ -39,9 +39,20 @@ inline constexpr unsigned operator|(ScriptPermission a, ScriptPermission b) {
 	return static_cast<unsigned>(a) | static_cast<unsigned>(b);
 }
 
+// Snapshot returned by host.arch_status() [emulator.read].  Fields that the
+// host cannot expose stay at their zero value instead of failing the call.
+struct ScriptArchStatus {
+	bool running = false;                    // emulator is advancing
+	bool paused = false;                      // emulator is paused
+	unsigned long long cycles = 0;            // executed cycles (0 if no counter is exposed)
+	std::string model;                        // running model name
+	unsigned short hardwareId = 0;            // model hardware id (e.g. 10/14 for CG100)
+};
+
 // Host services available to a script.  Empty std::functions are safe: the
-// corresponding host API returns nil / an empty value.  The registry fills
-// these from the existing PluginApi facades; headless tests supply their own.
+// corresponding host API returns nil / an empty value and logs one warning.
+// The registry fills these from the existing PluginApi facades; headless tests
+// supply their own.
 struct ScriptHostApi {
 	std::function<void(const std::string&)> log;
 	std::function<std::uint64_t()> tick;
@@ -55,6 +66,17 @@ struct ScriptHostApi {
 	std::function<bool(int, int)> keyIsDown;
 	std::function<void(int, int, bool)> key;
 	std::function<void(const std::string&)> addWindow;
+	// Architecture control.  cmd is one of "reboot", "reset", "power_on",
+	// "enter_diag" (arg = diag mode).  Returns false when the host has no
+	// emulator core bound or does not recognise the command.
+	std::function<bool(const std::string& cmd, int arg)> archControl;
+	// Fill a state snapshot; false means no emulator state is available.
+	std::function<bool(ScriptArchStatus&)> archStatus;
+	// Register a button on a script-owned window.  `invoke` calls back into the
+	// script's Lua state (registry-ref pattern); it is safe to call from the UI
+	// thread after the script has unloaded (it then becomes a no-op).
+	// Returns an opaque button id, or 0 when the host has no script window UI.
+	std::function<int(const std::string& window, const std::string& label, std::function<void()> invoke)> addButton;
 };
 
 struct ScriptRuntimeConfig {
