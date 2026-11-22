@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "com.casioemu.script.arch-status-demo",
+  "name": "Architecture status demo",
+  "version": "1.0.0",
+  "author": "CasioEmuMsvc iPadOS core",
+  "description": "Data-only Lua script (no native code) demonstrating the sandboxed host.arch_status() API.",
+  "min_host": "2.2.0",
+  "platforms": [
+    "ipados",
+    "ios"
+  ],
+  "type": "script",
+  "permissions": [
+    "emulator.read"
+  ],
+  "entry_point": "main.lua",
+  "assets": [
+    "main.lua"
+  ],
+  "script_engine": "lua54",
+  "script_api": 1,
+  "script_budget": 2000000
+}

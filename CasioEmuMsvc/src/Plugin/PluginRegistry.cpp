@@ -439,6 +439,13 @@ void PluginRegistry::ApplyDenials(PluginEntry& entry) {
 void PluginRegistry::LoadEntry(PluginEntry& entry) {
 	if (entry.loaded || !entry.enabled || entry.blocked || entry.removed || !entry.package.valid)
 		return;
+	// Data-only Lua scripts are loaded by IPadOSScriptPlugins.cpp (which runs
+	// them in ScriptRuntime). The legacy declarative loader must not try to
+	// parse a .lua file as JSON when the bundle directory is case-insensitive.
+	if (entry.package.manifest.type == PluginType::Script) {
+		LogLine("[script] " + entry.Id() + ": data-only Lua script handled by the script loader");
+		return;
+	}
 	if (entry.libraryRetained) {
 		entry.state = "Restart required (hooks retained)";
 		entry.error = "plugin.lifecycle: the previous library is still mapped because it "

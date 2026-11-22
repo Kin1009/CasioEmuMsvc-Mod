@@ -26,6 +26,13 @@ constexpr const char* kPermissionNames[] = {
 	"clipboard",
 };
 
+// Local mirror of the canonical PlatformTags.h known-tag list. The canonical
+// header is owned by another agent; keeping the list here lets this port parse
+// the bundled `ipados`/`ios` data-only manifests without editing shared code.
+constexpr const char* kKnownOsTags[] = {
+	"macos", "linux", "windows", "android", "ipados", "ios", "any",
+};
+
 constexpr const char* kPermissionDescriptions[] = {
 	"Observe the model, ROM, memory, registers, and debugger state.",
 	"Write RAM, registers, and memory monitors.",
@@ -45,6 +52,13 @@ ManifestResult Fail(const std::string& code, const std::string& message) {
 	result.code = code;
 	result.message = message;
 	return result;
+}
+
+bool IsKnownOsTagLocal(const std::string& tag) {
+	for (const char* known : kKnownOsTags)
+		if (tag == known)
+			return true;
+	return false;
 }
 
 bool GetString(const json& object, const char* key, std::string& out, bool required, std::string& error) {
@@ -93,6 +107,7 @@ const char* TypeName(PluginType type) {
 	case PluginType::Inject: return "inject";
 	case PluginType::UiRevamp: return "ui_revamp";
 	case PluginType::Tool: return "tool";
+	case PluginType::Script: return "script";
 	}
 	return "unknown";
 }
@@ -103,6 +118,7 @@ bool ParsePluginType(const std::string& name, PluginType& out) {
 	if (name == "inject") { out = PluginType::Inject; return true; }
 	if (name == "ui_revamp") { out = PluginType::UiRevamp; return true; }
 	if (name == "tool") { out = PluginType::Tool; return true; }
+	if (name == "script") { out = PluginType::Script; return true; }
 	return false;
 }
 
@@ -287,6 +303,46 @@ ManifestResult ParseManifest(const std::string& jsonText) {
 		return Fail("manifest.type", "unknown type '" + type_name + "'");
 	manifest.typeName = type_name;
 
+	// Additive script fields. Schema stays 1; native types ignore them.
+	if (manifest.type == PluginType::Script) {
+		error.clear();
+		if (!GetString(document, "script_engine", manifest.scriptEngine, false, error))
+			return Fail("manifest.field", error);
+		if (manifest.scriptEngine.empty())
+			manifest.scriptEngine = kScriptEngineLua54;
+		if (manifest.scriptEngine != kScriptEngineLua54)
+			return Fail("manifest.script_engine", "unknown script_engine '" + manifest.scriptEngine +
+				"' (host supports '" + kScriptEngineLua54 + "')");
+
+		if (document.contains("script_api")) {
+			if (!document["script_api"].is_number_integer())
+				return Fail("manifest.script_api", "script_api must be an integer");
+			manifest.scriptApi = document["script_api"].get<int>();
+			if (manifest.scriptApi < 1 || manifest.scriptApi > kScriptApiVersion)
+				return Fail("manifest.script_api", "unsupported script_api " +
+					std::to_string(manifest.scriptApi) + " (host supports 1.." +
+					std::to_string(kScriptApiVersion) + ")");
+		}
+
+		if (document.contains("script_budget")) {
+			if (!document["script_budget"].is_number_integer())
+				return Fail("script.budget", "script_budget must be an integer");
+			const auto budget = document["script_budget"].get<unsigned long long>();
+			if (budget == 0 || budget > kMaxScriptBudget)
+				return Fail("script.budget", "script_budget must be in 1.." +
+					std::to_string(kMaxScriptBudget));
+			manifest.scriptBudget = budget;
+		}
+
+		// Scripts are data only: no native code and a Lua source entry point.
+		if (!manifest.nativeEntry.empty())
+			return Fail("manifest.field", "script plugins cannot include native_entry (data-only plugins)");
+		const std::string extension = manifest.entryPoint.size() >= 4
+			? manifest.entryPoint.substr(manifest.entryPoint.size() - 4) : std::string();
+		if (extension != ".lua")
+			return Fail("manifest.field", "script entry_point must end in .lua");
+	}
+
 	if (document.contains("min_host")) {
 		if (!IsValidSemver(manifest.minHost))
 			return Fail("manifest.min_host", "min_host must be semver");
@@ -305,8 +361,8 @@ ManifestResult ParseManifest(const std::string& jsonText) {
 		}
 	}
 	for (const auto& platform : manifest.platforms) {
-		if (platform != "macos")
-			return Fail("manifest.platform", "only the 'macos' platform is supported");
+		if (!IsKnownOsTagLocal(platform))
+			return Fail("manifest.platform", "unknown platform '" + platform + "'");
 	}
 	if (manifest.platforms.empty())
 		manifest.platforms.push_back("macos");

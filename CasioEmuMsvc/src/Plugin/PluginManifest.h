@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginVersion.h"
+#include "ScriptRuntime.h"
 
 #include <filesystem>
 #include <string>
@@ -21,6 +22,8 @@ enum class PluginType {
 	Inject,
 	UiRevamp,
 	Tool,
+	// Data-only Lua script: no native binary, therefore installable on iPadOS.
+	Script,
 };
 
 struct Manifest {
@@ -40,9 +43,14 @@ struct Manifest {
 	std::vector<std::string> assets;
 	std::string nativeEntry;
 	int apiVersion = 1;
+	// Additive script fields (schema stays 1). Ignored by native plugin types.
+	std::string scriptEngine = kScriptEngineLua54;
+	int scriptApi = kScriptApiVersion;
+	unsigned long long scriptBudget = kDefaultScriptBudget;
 
 	[[nodiscard]] bool HasPermission(const std::string& permission) const;
 	[[nodiscard]] bool IsNative() const { return !nativeEntry.empty(); }
+	[[nodiscard]] bool IsScript() const { return type == PluginType::Script; }
 };
 
 struct ManifestResult {
