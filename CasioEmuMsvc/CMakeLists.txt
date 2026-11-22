@@ -737,6 +737,23 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
     add_test(NAME rom_package_security COMMAND casioemu_rom_package_security)
 endif()
 
+# ------------------------------------------------- FA05 architecture dispatch
+# Host-only, SDL-free regressions for the data-driven architecture descriptor:
+#   arch_descriptor_smoke - descriptor parsing/defaults/config round-trip
+#   arch_dispatch_probe   - before/after provider selection for CG50/GIII/CG100
+if(NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
+    foreach(fa05_test arch_descriptor_smoke arch_dispatch_probe)
+        add_executable(casioemu_${fa05_test}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/${fa05_test}.cpp")
+        target_include_directories(casioemu_${fa05_test} PRIVATE "${SOURCE_DIR}")
+        set_target_properties(casioemu_${fa05_test} PROPERTIES
+            CXX_STANDARD 20
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+        add_test(NAME ${fa05_test} COMMAND casioemu_${fa05_test})
+        set_tests_properties(${fa05_test} PROPERTIES TIMEOUT 30)
+    endforeach()
+endif()
+
 
 # ------------------------------------------------------------------ Wiz toolchain
 # The Wiz / CWiz compiler, built in-process (see third_party/wiz). The Toolchain

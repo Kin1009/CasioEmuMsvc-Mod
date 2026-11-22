@@ -10,6 +10,11 @@ class PluginApi;  // forward declaration: keep this header safe to include from 
 // Global architecture-provider registry (owned by PluginMan.cpp).
 casioemu::IArchitectureRegistry* GetArchitectureRegistry();
 
+/// Data-driven provider lookup by IArchitectureProvider::GetId(). This is the
+/// canonical dispatch for board models: hardware ids are legacy fallback only
+/// (V_ARCHSEL-01). Returns nullptr when no provider has that id.
+casioemu::IArchitectureProvider* FindArchitectureProviderById(const char* id);
+
 struct PluginInfo {
     std::string id;
     std::string name;

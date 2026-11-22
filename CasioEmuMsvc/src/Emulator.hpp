@@ -19,6 +19,7 @@
 #include "ModelResourceStore.h"
 #include "QrCode.h"
 #include "Plugin/IArchitectureProvider.h"
+#include "Plugin/ArchDescriptor.h"
 
 namespace casioemu {
 	class Chipset;
@@ -107,11 +108,12 @@ namespace casioemu {
 		SpriteInfo interface_background;
 		SDL_Rect emu_rect{};
 
-		// Optional plugin-provided architecture core (e.g. SH4 / CG100).
-		// When set, Frame()/Tick()/UIEvent() delegate to this core while the
-		// normal single-window IDE skin, ImGui debugger tabs and the Calculator
-		// dock panel remain fully intact. The core's framebuffer is composited
-		// into the LCD rectangle of the model skin.
+		// Optional plugin-provided architecture core (any architecture). When
+		// set, Frame()/Tick()/UIEvent() delegate to this core while the normal
+		// single-window IDE skin, ImGui debugger tabs and the Calculator dock
+		// panel remain fully intact. `arch_descriptor` is the data-driven board
+		// descriptor that selected this core (never a per-board code branch).
+		arch::Descriptor arch_descriptor{};
 		std::atomic<IEmulatorCore*> arch_core{nullptr};
 		SDL_Texture* arch_lcd_texture = nullptr;
 		int arch_lcd_tex_w = 0;
@@ -159,6 +161,10 @@ namespace casioemu {
 		void RemoveButtonHighlight(const Rect& rect);
 
 		void SetArchitectureCore(IEmulatorCore* core);
+		// Descriptor that selected the architecture core. Set by the host before
+		// the core is attached so geometry/clock setup is board-agnostic.
+		void SetArchDescriptor(const arch::Descriptor& descriptor) { arch_descriptor = descriptor; }
+		const arch::Descriptor& GetArchDescriptor() const { return arch_descriptor; }
 
 		/**
 		 * A bunch of internally used methods for encapsulation purposes.

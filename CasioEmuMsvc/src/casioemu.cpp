@@ -52,6 +52,7 @@
 #include "StartupUi/StartupUi.h"
 #include <Gui.h>
 #include <Plugin/PluginMan.h>
+#include <Plugin/ArchDescriptor.h>
 #include <ThemeManager.h>
 #include <Binary.h>
 #include "DiscordRPC.h"
@@ -398,29 +399,41 @@ for (;;) {
 	bool no_dbg = !argv_map["no_dbg"].empty();
 	low_perf_ext = !argv_map["low_perf_ext"].empty();
 
-	// --- Plugin-provided architecture dispatch ---
-	// The registry is consulted BEFORE Emulator construction. A board model
-	// (config.bin board_path non-empty, hardware_id 10 / HW_CG100) is driven by
-	// the SH4 plugin core, but the core is attached to a NORMAL Emulator: the
-	// single-window IDE, debugger tabs, Calculator dock panel, SDL_RenderPresent
-	// and casioctl all keep working unchanged. No separate SDL window is made.
+	// --- Data-driven architecture dispatch ---
+	// The registry is consulted BEFORE Emulator construction. Any board model
+	// (config.bin board_path non-empty OR an `arch_provider` descriptor key) is
+	// driven by an architecture core selected BY PROVIDER ID from the model's
+	// config -- never by a hardcoded hardware id or board name. This is what
+	// lets CG100, CG50 and GIII packs choose their own cores (V_ARCHSEL-01).
+	// The core is attached to a NORMAL Emulator: the single-window IDE, debugger
+	// tabs, Calculator dock panel, SDL_RenderPresent and casioctl keep working.
 	LoadArchitecturePlugins();
 	casioemu::IEmulatorCore* plugin_core = nullptr;
 	casioemu::IArchitectureProvider* arch_provider = nullptr;
 	casioemu::ModelInfo plugin_model{};
+	casioemu::arch::Descriptor arch_desc{};
 	{
 		const std::string model_dir = argv_map["model"];
 		std::ifstream config_stream(std::filesystem::path(model_dir) / "config.bin", std::ios::binary);
 		if (config_stream) {
 			try {
 				Binary::Read(config_stream, plugin_model);
-				// Only board models (CG100 packs carry board.svg + board_path)
-				// are dispatched. Ordinary EPS6009 packs keep their built-in core.
-				if (!plugin_model.board_path.empty() && plugin_model.hardware_id == casioemu::HW_CG100) {
-					arch_provider = GetArchitectureRegistry()->FindProvider(plugin_model.hardware_id);
+				arch_desc = casioemu::arch::FromModel(plugin_model);
+				if (casioemu::arch::IsBoardModel(plugin_model)) {
+					// Prefer the descriptor's provider id. Fall back to the legacy
+					// hardware-id lookup so unmodified CG100 plugins (which only
+					// advertise supported hardware ids) keep working.
+					if (!arch_desc.provider_id.empty())
+						arch_provider = FindArchitectureProviderById(arch_desc.provider_id.c_str());
+					if (!arch_provider)
+						arch_provider = GetArchitectureRegistry()->FindProvider(plugin_model.hardware_id);
 					if (arch_provider) {
 						plugin_core = arch_provider->CreateCore();
 						if (!plugin_core) arch_provider = nullptr;
+					}
+					else {
+						std::cerr << "[ArchProvider] No provider for '" << arch_desc.provider_id
+							<< "' (hardware_id " << plugin_model.hardware_id << ")\n";
 					}
 				}
 			}
@@ -432,6 +445,7 @@ for (;;) {
 
 	Emulator emulator(argv_map, false, std::move(startup_resources));
 	m_emu = &emulator;
+	emulator.SetArchDescriptor(arch_desc); // same descriptor used for dispatch
 
 	// Attach the plugin architecture core to the fully-constructed Emulator.
 	// Rendering now flows through Emulator::Frame() -> composite texture ->

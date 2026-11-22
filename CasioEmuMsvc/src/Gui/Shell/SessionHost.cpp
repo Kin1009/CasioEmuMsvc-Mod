@@ -6,6 +6,7 @@
 #include "Peripheral/Screen.hpp"
 #include "Plugin/IArchitectureProvider.h"
 #include "Plugin/PluginMan.h"
+#include "Plugin/ArchDescriptor.h"
 #include "Settings/Settings.h"
 #include "Binary.h"
 #include "ModelInfo.h"
@@ -87,8 +88,9 @@ void PointGlobalsAt(int index) {
 	me_mmu = &entry.emulator->chipset.mmu;
 }
 
-// Board models (the fx-CG100 SH4 pack) are driven by a plugin architecture
-// core. The emulator intentionally skips chipset.Setup() for them, so a board
+// Board models (CG100, CG50, GIII -- any architecture described by config.bin)
+// are driven by a plugin architecture core selected by provider id. The
+// emulator intentionally skips chipset.Setup() for them, so a board
 // model with no attached core is completely inert. main() attaches the core to
 // the primary emulator from its config.bin; models opened from the GUI go
 // through OpenSession() instead and previously never got a core -- that is why
@@ -113,12 +115,19 @@ void AttachArchitectureCoreForSession(Emulator& emulator, const std::string& mod
 		std::fprintf(stderr, "[ArchProvider][session] Failed to read config.bin: %s\n", e.what());
 		return;
 	}
-	// Only board models (CG100 packs carry board.svg + board_path) are
-	// dispatched. Ordinary models keep their built-in core.
-	if (model.board_path.empty() || model.hardware_id != HW_CG100)
+	// Data-driven dispatch, mirroring main(): any model with board_path OR an
+	// `arch_provider` descriptor key is board-driven. The provider id comes
+	// from the descriptor; hardware_id is only a legacy fallback for old
+	// CG100 plugins that advertise no provider id.
+	const arch::Descriptor descriptor = arch::FromModel(model);
+	if (!arch::IsBoardModel(model))
 		return;
 
-	IArchitectureProvider* provider = GetArchitectureRegistry()->FindProvider(model.hardware_id);
+	IArchitectureProvider* provider = nullptr;
+	if (!descriptor.provider_id.empty())
+		provider = FindArchitectureProviderById(descriptor.provider_id.c_str());
+	if (!provider)
+		provider = GetArchitectureRegistry()->FindProvider(model.hardware_id);
 	if (!provider)
 		return;
 	IEmulatorCore* core = provider->CreateCore();
@@ -143,6 +152,7 @@ void AttachArchitectureCoreForSession(Emulator& emulator, const std::string& mod
 	}
 	if (core->Initialize(info)) {
 		core->Reset();
+		emulator.SetArchDescriptor(descriptor);
 		emulator.SetArchitectureCore(core);
 		std::printf("[ArchCore] SH4 Architecture attached to session Emulator; LCD rect = (%d,%d,%d,%d)\n",
 			info.lcd_x, info.lcd_y, info.lcd_w, info.lcd_h);
