@@ -1,30 +1,39 @@
 # Lua 5.4.8 instruction-budget patch (plugin sandbox, Phase 1)
 #
-# Applies to: lua_config_convert/lua-5.4.8/src/{lvm.c,lstate.h,lua.h}
+# Applies to: lua_config_convert/lua-5.4.8/src/{lvm.c,lstate.c,lstate.h,lua.h}
 # Purpose:    hard, low-overhead termination of runaway plugin scripts (~5-15%
 #             overhead vs the stock debug hook's 2.2-2.5x). Adds an
 #             `instr_budget` field to lua_State, decrements it in vmfetch() and
 #             raises a regular Lua error when it reaches zero. Host sets it
 #             before each plugin entry/frame call via lua_setinstrbudget().
+#             Exhaustion is sticky (`budget_exhausted`): until the host installs
+#             a fresh budget, every further VM instruction fails immediately.
+#             This is what stops a to-be-closed variable's __close metamethod
+#             from running budget-exempt while the budget error unwinds.
 # Re-apply:   after any Lua version bump, from the repository root:
 #               patch -p1 --forward < CasioEmuMsvc/patches/lua-5.4.8-instruction-budget.patch
 #             (The paths below are relative to lua_config_convert/lua-5.4.8/.)
-# Verified:   scratch benchmark bench/lua-budget-src/, 2026-11-21.
+# Verified:   scratch benchmark bench/lua-budget-src/, 2026-11-21;
+#             sandbox-escape regressions 2026-11-22 (see LUA_SEC_FINAL.md).
 --- a/src/lvm.c
 +++ b/src/lvm.c
-@@ -1142,6 +1142,11 @@
-   if (l_unlikely(trap)) {  /* stack reallocation or hooks? */ \
+@@ -1143,6 +1143,15 @@
      trap = luaG_traceexec(L, pc);  /* handle hooks */ \
      updatebase(ci);  /* correct stack */ \
-+  } \
-+  /* PLUGIN SANDBOX PATCH: hard instruction budget (0 = unlimited). */ \
-+  if (l_unlikely(L->instr_budget != 0)) { \
-+    if (--L->instr_budget == 0) \
-+      luaG_runerror(L, "instruction budget exhausted"); \
    } \
++  /* PLUGIN SANDBOX PATCH: hard instruction budget (0 = unlimited). */ \
++  if (l_unlikely(L->budget_exhausted)) \
++    luaG_runerror(L, "instruction budget exhausted"); \
++  if (l_unlikely(L->instr_budget != 0)) { \
++    if (--L->instr_budget == 0) { \
++      L->budget_exhausted = 1; \
++      luaG_runerror(L, "instruction budget exhausted"); \
++    } \
++  } \
    i = *(pc++); \
  }
-@@ -1900,3 +1905,8 @@
+ 
+@@ -1900,3 +1909,9 @@
  }
  
  /* }================================================================== */
@@ -32,10 +41,25 @@
 +/* --- plugin sandbox API (see patches/lua-5.4.8-instruction-budget.patch) --- */
 +LUA_API void lua_setinstrbudget (lua_State *L, unsigned long long n) {
 +  L->instr_budget = n;
++  L->budget_exhausted = 0;  /* fresh budget clears the fail-closed state */
 +}
+--- a/src/lstate.c
++++ b/src/lstate.c
+@@ -261,6 +261,11 @@
+   resethookcount(L);
+   L->openupval = NULL;
+   L->status = LUA_OK;
++  /* PLUGIN SANDBOX PATCH: deterministic budget state for every new thread.
++     The host installs the real budget with lua_setinstrbudget before running
++     any script; until then there is no limit and no fail-closed state. */
++  L->instr_budget = 0;
++  L->budget_exhausted = 0;
+   L->errfunc = 0;
+   L->oldpc = 0;
+ }
 --- a/src/lstate.h
 +++ b/src/lstate.h
-@@ -308,6 +308,10 @@
+@@ -308,6 +308,14 @@
  */
  struct lua_State {
    CommonHeader;
@@ -43,6 +67,10 @@
 +     Refilled by the host before every plugin callback; see
 +     patches/lua-5.4.8-instruction-budget.patch. */
 +  unsigned long long instr_budget;
++  /* PLUGIN SANDBOX PATCH: set once the budget is exhausted.  Fail closed for
++     every later VM instruction -- including __close metamethods invoked while
++     unwinding the budget error -- until the host installs a fresh budget. */
++  lu_byte budget_exhausted;
    lu_byte status;
    lu_byte allowhook;
    unsigned short nci;  /* number of items in 'ci' list */

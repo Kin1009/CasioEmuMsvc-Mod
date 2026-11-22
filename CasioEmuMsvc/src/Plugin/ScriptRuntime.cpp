@@ -377,7 +377,13 @@ void RegisterHostTable(lua_State* L, ScriptRuntimeImpl* impl) {
 
 // Only side-effect-free libraries are registered.  `io`, `os`, `package` and
 // `debug` are never opened; require/dofile/loadfile/collectgarbage are removed
-// explicitly so the globals cannot be used as capability escapes.
+// explicitly so the globals cannot be used as capability escapes.  `load` (and
+// its legacy alias `loadstring`) are removed as well: Lua's load() defaults to
+// mode "bt", so a script could otherwise call load() with a binary string and
+// compile raw bytecode into this very lua_State, bypassing the text-only
+// luaL_loadbufferx(..., "t") used for the plugin chunk.  With load removed the
+// only compiler entry point is the host's text-only Load(); the instruction
+// budget and allocator caps still apply to all executed code.
 void RegisterSafeLibraries(lua_State* L) {
 	static const luaL_Reg libraries[] = {
 		{ "_G", luaopen_base },
@@ -391,7 +397,7 @@ void RegisterSafeLibraries(lua_State* L) {
 		luaL_requiref(L, lib->name, lib->func, 1);
 		lua_pop(L, 1);
 	}
-	static const char* removed[] = { "require", "dofile", "loadfile", "collectgarbage", "io", "os", "package", "debug" };
+	static const char* removed[] = { "load", "loadstring", "require", "dofile", "loadfile", "collectgarbage", "io", "os", "package", "debug" };
 	for (const char* name : removed) {
 		lua_pushnil(L);
 		lua_setglobal(L, name);

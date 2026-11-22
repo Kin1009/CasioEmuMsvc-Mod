@@ -312,6 +312,10 @@ struct lua_State {
      Refilled by the host before every plugin callback; see
      patches/lua-5.4.8-instruction-budget.patch. */
   unsigned long long instr_budget;
+  /* PLUGIN SANDBOX PATCH: set once the budget is exhausted.  Fail closed for
+     every later VM instruction -- including __close metamethods invoked while
+     unwinding the budget error -- until the host installs a fresh budget. */
+  lu_byte budget_exhausted;
   lu_byte status;
   lu_byte allowhook;
   unsigned short nci;  /* number of items in 'ci' list */

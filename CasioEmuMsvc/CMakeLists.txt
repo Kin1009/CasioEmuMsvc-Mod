@@ -667,6 +667,22 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
         set_tests_properties(plugin_registry_headless PROPERTIES
             ENVIRONMENT "CASIOEMU_PLUGIN_TEST_ROOT=/Users/kin/Desktop/Wiz/temp/plugin-tests")
     endif()
+
+    # Sandbox-escape regressions: budget-exhaustion __close bypass and the
+    # global load() binary-bytecode escape.  The TIMEOUT is a safety net: a
+    # regression of the __close bug hangs instead of returning a budget error.
+    add_executable(casioemu_script_runtime_security
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/script_runtime_security.cpp"
+        "${SOURCE_DIR}/Plugin/ScriptRuntime.cpp")
+    target_include_directories(casioemu_script_runtime_security PRIVATE
+        "${SOURCE_DIR}"
+        "${SOURCE_DIR}/Plugin")
+    set_target_properties(casioemu_script_runtime_security PROPERTIES
+        CXX_STANDARD 20
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+    target_link_libraries(casioemu_script_runtime_security PRIVATE lua)
+    add_test(NAME script_runtime_security COMMAND casioemu_script_runtime_security)
+    set_tests_properties(script_runtime_security PROPERTIES TIMEOUT 30)
 endif()
 
 
