@@ -1333,8 +1333,12 @@ bool PluginRegistry::InstallFromFile(const std::filesystem::path& file, std::str
 			break;
 		}
 	}
-	if (!added)
-		return fail("Installed package was rejected: " + destination.filename().string());
+	if (!added) {
+		// Do not leave a package that will be rejected again on every scan.
+		std::error_code cleanup_ec;
+		std::filesystem::remove(destination, cleanup_ec);
+		return fail("Duplicate plugin id or rejected package: " + destination.filename().string());
+	}
 	if (added->state == "Invalid" || added->state == "Error") {
 		const std::string message = added->error;
 		// Keep the copied file for inspection, but report the failure.

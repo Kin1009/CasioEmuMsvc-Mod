@@ -193,7 +193,9 @@ void PluginLogWindow::RenderInstalled() {
 					registry.Unload(entry.Id());
 			}
 			ImGui::SameLine();
-			if (ImGui::SmallButton("Reveal"))
+			// Invalid entries already have a path-based Reveal above; using
+			// the empty id here would open the first invalid entry instead.
+			if (!entry.Id().empty() && ImGui::SmallButton("Reveal"))
 				registry.Reveal(entry.Id());
 			// Invalid packages have no manifest id; Remove(id) would match
 			// the first other entry with an empty id instead of this row.

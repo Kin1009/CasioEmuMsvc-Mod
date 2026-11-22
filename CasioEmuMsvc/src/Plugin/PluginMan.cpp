@@ -116,7 +116,8 @@ namespace {
 		std::vector<std::string> unique_keys;
 		for (auto& p : candidates) {
 			std::error_code ec;
-			const std::string key = std::filesystem::weakly_canonical(p, ec).string();
+			std::string key = std::filesystem::weakly_canonical(p, ec).string();
+			if (ec) key = p.string(); // match ArchitectureModuleKey's fallback
 			if (std::find(unique_keys.begin(), unique_keys.end(), key) != unique_keys.end())
 				continue;
 			unique_keys.push_back(key);
