@@ -261,6 +261,11 @@ static void preinit_thread (lua_State *L, global_State *g) {
   resethookcount(L);
   L->openupval = NULL;
   L->status = LUA_OK;
+  /* PLUGIN SANDBOX PATCH: deterministic budget state for every new thread.
+     The host installs the real budget with lua_setinstrbudget before running
+     any script; until then there is no limit and no fail-closed state. */
+  L->instr_budget = 0;
+  L->budget_exhausted = 0;
   L->errfunc = 0;
   L->oldpc = 0;
 }

@@ -55,6 +55,10 @@
 #include <Gui.h>
 #include <Plugin/PluginMan.h>
 #include <Plugin/ArchDescriptor.h>
+#include <Plugin/ArchModelSelection.h>
+#ifdef CASIOEMU_IPADOS
+#include "IPadOSScriptPlugins.h"
+#endif
 #include <ThemeManager.h>
 #include <Binary.h>
 #include "DiscordRPC.h"
@@ -305,6 +309,9 @@ int main(int argc, char* argv[]) {
 	if (headless && argv_map["model"].empty()) {
 		PANIC("No model path supplied.\n");
 	}
+// Early architecture pass before model selection.
+LoadArchitecturePlugins();
+
 for (;;) {
 	std::shared_ptr<casioemu::ModelResourceStore> startup_resources;
 	if (argv_map["model"].empty()) {
@@ -320,13 +327,32 @@ for (;;) {
 	if (argv_map["model"].empty()) {
 		char* base_path = SDL_GetBasePath();
 		if (base_path) {
-			for (const char* rel : {"models/fx-CG100", "../Resources/models/fx-CG100"}) {
-				const std::string candidate = std::string(base_path) + rel;
-				if (std::filesystem::exists(std::filesystem::path(candidate) / "config.bin")) {
-					argv_map["model"] = candidate;
-					break;
-				}
+			std::vector<arch::ModelCandidate> candidates;
+			const auto add_candidate = [&candidates](const std::filesystem::path& directory) {
+				std::ifstream config_stream(directory / "config.bin", std::ios::binary);
+				if (!config_stream) return;
+				try {
+					casioemu::ModelInfo info;
+					Binary::Read(config_stream, info);
+					candidates.push_back({directory, info});
+				} catch (const std::exception&) { /* malformed pack: skip */ }
+			};
+			for (const char* rel : {"models/fx-CG100", "../Resources/models/fx-CG100"})
+				add_candidate(std::filesystem::path(base_path) / rel);
+			std::error_code ec;
+			const std::filesystem::path models_dir = std::filesystem::path(base_path) / "models";
+			for (std::filesystem::directory_iterator it(models_dir, ec), end;
+			     !ec && it != end; it.increment(ec)) {
+				if (it->is_directory(ec)) add_candidate(it->path());
 			}
+			const arch::ModelSelection selection = arch::SelectModel(candidates,
+				[](const arch::Descriptor& descriptor) {
+					return descriptor.valid() &&
+					       FindArchitectureProviderById(descriptor.provider_id.c_str()) != nullptr;
+				});
+			std::cout << arch::DescribeSelection(selection) << "
+";
+			if (selection.found) argv_map["model"] = selection.path.string();
 			SDL_free(base_path);
 		}
 	}
@@ -359,7 +385,6 @@ for (;;) {
 	// Calculator dock panel, SDL_RenderPresent and casioctl all keep working
 	// unchanged. No separate SDL window is made. Adding a future CG50 board is
 	// a model-pack-only change; see docs/ARCH_DESCRIPTOR_FORMAT.md.
-	LoadArchitecturePlugins();
 	casioemu::IEmulatorCore* plugin_core = nullptr;
 	casioemu::IArchitectureProvider* arch_provider = nullptr;
 	casioemu::ModelInfo plugin_model{};

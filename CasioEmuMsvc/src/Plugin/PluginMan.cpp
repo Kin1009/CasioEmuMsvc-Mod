@@ -5,6 +5,10 @@
 #endif
 #include "PluginPackage.h"
 #include "PluginRegistry.h"
+#include "StaticArchitecture.h"
+#ifdef CASIOEMU_IPADOS
+#include "IPadOSScriptPlugins.h"
+#endif
 #include <iostream>
 #include <fstream>
 #include <cctype>
@@ -327,6 +331,9 @@ void LoadPlugins() {
 	// were bundled into the app at build time; native entries are rejected by
 	// PluginRegistry::LoadNative in this configuration.
 	casioemu::ipados::plugins::LoadBundledPlugins();
+	const std::size_t scripts = casioemu::ipados::scripts::LoadScriptPlugins();
+	g_PluginLoadLog += "[INFO] iPadOS: loaded " + std::to_string(scripts) + " data-only Lua script plugin(s)\n";
+	g_PluginLoadLog += casioemu::ipados::scripts::Log();
 	g_PluginLoadLog += "[INFO] iPadOS: native plugin loading disabled (JIT/dlopen forbidden)\n";
 	g_PluginLoadLog += casioemu::ipados::plugins::Log();
 #endif
@@ -369,7 +376,12 @@ void LoadArchitecturePlugins() {
 #else
 void LoadArchitecturePlugins() {
 #ifdef CASIOEMU_IPADOS
-	g_PluginLoadLog += "[ARCH] iPadOS: architecture plugins must be statically bundled at build time; dynamic loading skipped\n";
+	g_PluginLoadLog += "[ARCH] iPadOS: dlopen/JIT forbidden; dynamic architecture plugins skipped\n";
+	const auto& report = casioemu::arch::RegisterStaticArchitectureProviders(
+		[](const std::string& line) { g_PluginLoadLog += line + "\n"; });
+	g_PluginLoadLog += "[ARCH] static bootstrap: " + std::to_string(report.registered) +
+		" registered, " + std::to_string(report.duplicates) + " duplicate(s), " +
+		std::to_string(report.failed) + " failed\n";
 #endif
 }
 #endif

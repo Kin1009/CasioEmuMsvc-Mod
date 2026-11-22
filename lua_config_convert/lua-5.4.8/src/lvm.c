@@ -1143,6 +1143,15 @@ void luaV_finishOp (lua_State *L) {
     trap = luaG_traceexec(L, pc);  /* handle hooks */ \
     updatebase(ci);  /* correct stack */ \
   } \
+  /* PLUGIN SANDBOX PATCH: hard instruction budget (0 = unlimited). */ \
+  if (l_unlikely(L->budget_exhausted)) \
+    luaG_runerror(L, "instruction budget exhausted"); \
+  if (l_unlikely(L->instr_budget != 0)) { \
+    if (--L->instr_budget == 0) { \
+      L->budget_exhausted = 1; \
+      luaG_runerror(L, "instruction budget exhausted"); \
+    } \
+  } \
   i = *(pc++); \
 }
 
@@ -1900,3 +1909,9 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
 }
 
 /* }================================================================== */
+
+/* --- plugin sandbox API (see patches/lua-5.4.8-instruction-budget.patch) --- */
+LUA_API void lua_setinstrbudget (lua_State *L, unsigned long long n) {
+  L->instr_budget = n;
+  L->budget_exhausted = 0;  /* fresh budget clears the fail-closed state */
+}
