@@ -25,7 +25,15 @@ endif()
 # set(CMAKE_CXX_EXTENSIONS OFF)
 set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+# V_BUILDALL: the committed `asmjit` entry is an absolute symlink to a
+# macOS-only path; it dangles on the Pi and in fresh clones, so a clean
+# configure fails at CMakeLists.txt:199. Prefer the vendored `asmjit-src`
+# tree when it is the one that actually contains CMakeLists.txt.
 set(ASMJIT_DIR "${THIRD_PARTY_DIR}/asmjit")
+if(NOT EXISTS "${ASMJIT_DIR}/CMakeLists.txt"
+   AND EXISTS "${THIRD_PARTY_DIR}/asmjit-src/CMakeLists.txt")
+    set(ASMJIT_DIR "${THIRD_PARTY_DIR}/asmjit-src")
+endif()
 set(MINIZ_DIR "${THIRD_PARTY_DIR}/miniz")
 set(TINYXML2_DIR "${THIRD_PARTY_DIR}/tinyxml2")
 set(TEMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/temp")
