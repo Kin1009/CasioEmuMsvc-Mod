@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
-"""Build a self-contained `.plugin` ZIP container for the CG100 architecture core.
+"""Build a self-contained `.plugin` ZIP container for an architecture core.
+
+This tool is ARCHITECTURE-AGNOSTIC. The provider id, display name and native
+entry names are parameters; their defaults reproduce the legacy CG100 SH4 pack,
+so existing invocations keep working unchanged. A future CG50 core is bundled
+by passing its own --provider-id / --core / --lib / --out values -- no code edit.
 
 A bundled .plugin is an ordinary ZIP archive (the host detects the `PK\\x03\\x04`
 magic) with this layout:
 
     plugin.json                 manifest consumed by PluginManifest.cpp
     assets/info.json            declarative info document (entry_point)
-    CG100SH4.plugin             the Mach-O dylib itself (native_entry)
-    lib/libcig100core.dylib     embedded dependency, found at runtime through
+    <native_entry>              the Mach-O dylib itself (native_entry)
+    lib/<lib_name>              embedded dependency, found at runtime through
                                 the dylib's @loader_path/lib LC_RPATH
 
-The archive keeps the `.plugin` file extension.  dylib entries are stored with
+The archive keeps the `.plugin` file extension. dylib entries are stored with
 executable bits (0755) so dyld can map them after extraction.
 
-Usage:
-    python3 tools/make_bundled_plugin.py \
-        --core /path/to/CG100SH4.plugin \
-        --lib  /path/to/libcig100core.dylib \
+Usage (legacy CG100 defaults):
+    python3 tools/make_bundled_plugin.py \\
+        --core /path/to/CG100SH4.plugin \\
+        --lib  /path/to/libcig100core.dylib \\
         --out  /path/to/output/CG100SH4.plugin
+
+Usage (future board):
+    python3 tools/make_bundled_plugin.py \\
+        --provider-id cg50sh4 --display-name "CG50 SH4 Architecture Core" \\
+        --native-entry CG50SH4.plugin --lib-name libcig50core.dylib \\
+        --core /path/to/CG50SH4.plugin --lib /path/to/libcig50core.dylib \\
+        --out /path/to/output/CG50SH4.plugin
 
 This tool only READS the live app's binaries; it never overwrites them.
 """
@@ -33,29 +45,40 @@ import sys
 import zipfile
 from pathlib import Path
 
-MANIFEST = {
-    "schema": 1,
-    "id": "com.casioemu.arch.cg100sh4",
-    "name": "CG100 SH4 Architecture Core",
-    "version": "1.0.0",
-    "author": "CasioEmuMsvc",
-    "description": (
-        "Native SH4 emulator core for the CG100 board model; bundles its "
-        "libcig100core.dylib dependency inside the .plugin container."
-    ),
-    "min_host": "2.1.0",
-    "platforms": ["macos"],
-    "type": "tool",
-    "permissions": ["ui.shell"],
-    "entry_point": "assets/info.json",
-    "native_entry": "CG100SH4.plugin",
-    "assets": ["assets/info.json"],
-}
+# Defaults reproduce the legacy CG100 pack exactly (behaviour preservation).
+DEFAULT_PROVIDER_ID = "cg100sh4"
+DEFAULT_DISPLAY_NAME = "CG100 SH4 Architecture Core"
+DEFAULT_NATIVE_ENTRY = "CG100SH4.plugin"
+DEFAULT_LIB_NAME = "libcig100core.dylib"
 
-INFO = {
-    "name": "CG100 SH4 Architecture Core",
-    "description": "Bundled native architecture core for the CG100 board model.",
-}
+
+def make_manifest(provider_id: str, display_name: str, native_entry: str,
+                  lib_name: str) -> dict:
+    return {
+        "schema": 1,
+        "id": f"com.casioemu.arch.{provider_id}",
+        "name": display_name,
+        "version": "1.0.0",
+        "author": "CasioEmuMsvc",
+        "description": (
+            f"Native architecture core (provider '{provider_id}') bundled with "
+            f"its dependency {lib_name} inside the .plugin container."
+        ),
+        "min_host": "2.1.0",
+        "platforms": ["macos"],
+        "type": "tool",
+        "permissions": ["ui.shell"],
+        "entry_point": "assets/info.json",
+        "native_entry": native_entry,
+        "assets": ["assets/info.json"],
+    }
+
+
+def make_info(display_name: str, provider_id: str) -> dict:
+    return {
+        "name": display_name,
+        "description": f"Bundled native architecture core (provider '{provider_id}').",
+    }
 
 
 def sha256(path: Path) -> str:
@@ -74,7 +97,12 @@ def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes, mode: int) -> No
     archive.writestr(info, data)
 
 
-def build(core: Path, lib: Path, out: Path) -> int:
+def build(core: Path, lib: Path, out: Path, provider_id: str, display_name: str,
+          native_entry: str, lib_name: str) -> int:
+    if out.resolve() in (core.resolve(), lib.resolve()):
+        print("error: --out must differ from --core and --lib (inputs are only read)",
+              file=sys.stderr)
+        return 2
     for path, label in ((core, "core dylib"), (lib, "dependency dylib")):
         if not path.is_file():
             print(f"error: {label} not found: {path}", file=sys.stderr)
@@ -85,13 +113,15 @@ def build(core: Path, lib: Path, out: Path) -> int:
     if tmp.exists():
         tmp.unlink()
 
+    manifest = make_manifest(provider_id, display_name, native_entry, lib_name)
+    lib_entry = f"lib/{lib_name}"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
         add_bytes(archive, "plugin.json",
-                  (json.dumps(MANIFEST, indent=2) + "\n").encode("utf-8"), 0o644)
+                  (json.dumps(manifest, indent=2) + "\n").encode("utf-8"), 0o644)
         add_bytes(archive, "assets/info.json",
-                  (json.dumps(INFO, indent=2) + "\n").encode("utf-8"), 0o644)
-        add_bytes(archive, "CG100SH4.plugin", core.read_bytes(), 0o755)
-        add_bytes(archive, "lib/libcig100core.dylib", lib.read_bytes(), 0o755)
+                  (json.dumps(make_info(display_name, provider_id), indent=2) + "\n").encode("utf-8"), 0o644)
+        add_bytes(archive, native_entry, core.read_bytes(), 0o755)
+        add_bytes(archive, lib_entry, lib.read_bytes(), 0o755)
 
     os.replace(tmp, out)
 
@@ -103,20 +133,19 @@ def build(core: Path, lib: Path, out: Path) -> int:
         return 3
     with zipfile.ZipFile(out, "r") as archive:
         names = archive.namelist()
-        expected = {"plugin.json", "assets/info.json", "CG100SH4.plugin",
-                    "lib/libcig100core.dylib"}
+        expected = {"plugin.json", "assets/info.json", native_entry, lib_entry}
         if set(names) != expected:
             print(f"error: unexpected entries: {names}", file=sys.stderr)
             return 3
-        if archive.read("CG100SH4.plugin") != core.read_bytes():
+        if archive.read(native_entry) != core.read_bytes():
             print("error: core dylib checksum mismatch", file=sys.stderr)
             return 3
-        if archive.read("lib/libcig100core.dylib") != lib.read_bytes():
+        if archive.read(lib_entry) != lib.read_bytes():
             print("error: dependency dylib checksum mismatch", file=sys.stderr)
             return 3
         json.loads(archive.read("plugin.json"))
 
-    print(f"Wrote bundled plugin: {out}")
+    print(f"Wrote bundled plugin: {out} (provider '{provider_id}')")
     print(f"  SHA-256: {sha256(out)}")
     print(f"  Entries: {', '.join(sorted(names))}")
     return 0
@@ -130,10 +159,14 @@ def main() -> int:
                         default=default_app / "Contents/MacOS/plugins/CG100SH4.plugin")
     parser.add_argument("--lib", type=Path,
                         default=default_app / "Contents/MacOS/plugins/lib/libcig100core.dylib")
-    parser.add_argument("--out", type=Path,
-                        default=Path.cwd() / "CG100SH4.plugin")
+    parser.add_argument("--out", type=Path, default=Path.cwd() / "CG100SH4.plugin")
+    parser.add_argument("--provider-id", default=DEFAULT_PROVIDER_ID)
+    parser.add_argument("--display-name", default=DEFAULT_DISPLAY_NAME)
+    parser.add_argument("--native-entry", default=DEFAULT_NATIVE_ENTRY)
+    parser.add_argument("--lib-name", default=DEFAULT_LIB_NAME)
     args = parser.parse_args()
-    return build(args.core, args.lib, args.out)
+    return build(args.core, args.lib, args.out, args.provider_id, args.display_name,
+                 args.native_entry, args.lib_name)
 
 
 if __name__ == "__main__":

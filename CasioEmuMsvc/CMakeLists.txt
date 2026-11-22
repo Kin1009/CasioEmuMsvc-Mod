@@ -441,6 +441,19 @@ else()
     message(STATUS "No resources/themes directory found; built-in presets will fall back to the legacy style")
 endif()
 
+# ------------------------------------------------ architecture descriptor test
+# Standalone host-side (no SDL / no device SDK) test of the data-driven board
+# descriptor. Also buildable directly with g++ (see docs/ARCH_DESCRIPTOR_FORMAT.md).
+if(NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
+    add_executable(casioemu_arch_descriptor_smoke
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/arch_descriptor_smoke.cpp")
+    target_include_directories(casioemu_arch_descriptor_smoke PRIVATE "${SOURCE_DIR}")
+    set_target_properties(casioemu_arch_descriptor_smoke PROPERTIES
+        CXX_STANDARD 20
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+    add_test(NAME arch_descriptor_smoke COMMAND casioemu_arch_descriptor_smoke)
+endif()
+
 if(CASIOEMU_BUILD_SETTINGS_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
     add_executable(casioemu_settings_smoke
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/settings_smoke.cpp"

@@ -37,11 +37,16 @@ namespace casioemu {
 		HW_EPS9500 = 11,
 		HW_EPS6800_W192 = 12,
 		HW_TI_MULTI_VIEW = 13,
-		// Plugin-provided SH4 architecture (fx-CG100). The shipped pack still
-		// carries hardware_id 10, so v53 board models are remapped to this
-		// dedicated id in ModelInfo::Read() to keep them out of every EPS path.
-		HW_CG100 = 14,
-		HW_MAX = HW_CG100,
+		// Reserved id for data-driven architecture "board" models (SH4 and any
+		// future architecture). ModelInfo::Read() remaps ANY board model to this
+		// id so no built-in/EPS peripheral path ever sees one. The concrete
+		// provider is chosen from the config's architecture descriptor, NOT from
+		// this id, so new boards need no code change.
+		HW_ARCH = 14,
+		// Legacy alias retained for source/binary compatibility. New code should
+		// use arch::IsBoardModel() / the architecture descriptor instead.
+		HW_CG100 = HW_ARCH,
+		HW_MAX = HW_ARCH,
 	};
 
 	enum class EpsDisplayKind : unsigned char {
@@ -93,7 +98,7 @@ namespace casioemu {
 			EpsPowerKeyBehavior::HostCpuReset, 40, 60, 24},
 		{HW_TI_MULTI_VIEW, "TI MultiView", "TI MV", EpsVariant::None, EpsDisplayKind::None,
 			EpsPowerKeyBehavior::None, 20, 25, 0},
-		{HW_CG100, "CG100", "CG100", EpsVariant::None, EpsDisplayKind::None,
+		{HW_ARCH, "CG100", "CG100", EpsVariant::None, EpsDisplayKind::None,
 			EpsPowerKeyBehavior::None, 20, 25, 0},
 	}};
 	static_assert(HARDWARE_DESCRIPTORS.size() == static_cast<size_t>(HW_MAX - HW_MIN + 1));
@@ -345,12 +350,19 @@ namespace casioemu {
 					if (has_status_indicators && is.peek() != std::char_traits<char>::eof())
 						Binary::Read(is, status_indicators);
 				}
-				// The CG100 pack was authored against the stable tree where
-				// hardware_id 10 == HW_CG100. In the preview tree 10 is EPS6009;
-				// remap v53 board models to the dedicated SH4 id so no EPS
-				// peripheral code path ever sees them.
-				if (hardware_id == HW_EPS6009 && !board_path.empty())
-					hardware_id = HW_CG100;
+				// Any board model is driven by an architecture core, not by the
+				// built-in chipset. A model is a board when it has a non-empty
+				// board_path OR declares a non-empty `arch_provider` key -- the
+				// same predicate arch::IsBoardModel() uses. Remap it to the
+				// reserved HW_ARCH id so no EPS/nX peripheral path ever sees it.
+				// This covers the legacy CG100 pack (authored with hardware_id 10)
+				// and every future board (CG50, ...): the descriptor in `extra`
+				// selects the provider, so no per-board branch is needed here.
+				// Checked inline to avoid a circular include with ArchDescriptor.h.
+				const auto provider_it = extra.find("arch_provider");
+				const bool has_arch_provider = provider_it != extra.end() && !provider_it->second.empty();
+				if ((!board_path.empty() || has_arch_provider) && hardware_id != HW_ARCH)
+					hardware_id = HW_ARCH;
 			}
 		}
 	};

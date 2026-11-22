@@ -1026,7 +1026,7 @@ void Cg100AddressInput(uint32_t& address) {
 // The returned string is a *static* label describing where the bytes came from.
 const char* Cg100ReadFlash(uint32_t address, uint8_t* out, int count) {
 	if (casioemu::cg100info::ReadRaw(address, out, count))
-		return "live core (cg100_usb_read_raw)";
+		return "live core (descriptor C ABI read bridge)";
 	if (!m_emu)
 		return nullptr;
 	static std::ifstream flash;
@@ -1104,12 +1104,12 @@ void CodeViewer::RenderArchTabs() {
 		}
 	}
 
-	ToolUi::Section("CG100 / SH4 debug session");
+	ToolUi::Section("SH4 / architecture debug session");
 	char headline[256];
 	std::snprintf(headline, sizeof(headline), "%s  |  %s  |  %s",
 		info.core_id ? info.core_id : "unknown core",
 		info.status ? info.status : "unknown status",
-		m_emu ? m_emu->ModelDefinition.model_name.c_str() : "fx-CG100");
+		m_emu ? m_emu->ModelDefinition.model_name.c_str() : "SH4 board");
 	ImGui::TextUnformatted(headline);
 	ToolUi::Hint("Only data actually exported by the SH4 plugin core is shown. Values the "
 		"host cannot query (registers, MMIO, breakpoints, call frames) are labelled unavailable "
@@ -1173,8 +1173,8 @@ void CodeViewer::RenderArchTabs() {
 		arch_tab = 3;
 		ToolUi::Section("Not supported by the SH4 core");
 		ToolUi::Description("The architecture-core ABI has no breakpoint export. The legacy "
-			"breakpoint map belongs to the built-in nX/eps CPU and is inert for CG100, so it is "
-			"not offered here. Use the built-in chipset models for execution breakpoints.");
+			"breakpoint map belongs to the built-in nX/eps CPU and is inert for board models, "
+			"so it is not offered here. Use the built-in chipset models for execution breakpoints.");
 		ImGui::EndTabItem();
 	}
 
@@ -1194,9 +1194,13 @@ void CodeViewer::RenderArchTabs() {
 		ImGui::TextDisabled("Core status"); ImGui::SameLine(160.0f);
 		ImGui::TextUnformatted(info.status ? info.status : "unavailable");
 		ImGui::TextDisabled("Model"); ImGui::SameLine(160.0f);
-		ImGui::TextUnformatted(m_emu ? m_emu->ModelDefinition.model_name.c_str() : "fx-CG100");
+		ImGui::TextUnformatted(m_emu ? m_emu->ModelDefinition.model_name.c_str() : "SH4 board");
 		ImGui::TextDisabled("C ABI bridge"); ImGui::SameLine(160.0f);
-		ImGui::TextUnformatted(info.abi ? "live (cg100_* exports)" : "not exported by plugin build");
+		{
+			const std::string cabi = std::string("live (")
+				+ casioemu::cg100info::Desc().cabi_prefix + "* exports)";
+			ImGui::TextUnformatted(info.abi ? cabi.c_str() : "not exported by plugin build");
+		}
 		if (info.abi) {
 			char line[128];
 			std::snprintf(line, sizeof(line), "0x%llX  (%llu)",

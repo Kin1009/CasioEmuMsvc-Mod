@@ -24,7 +24,7 @@ public:
 		// CG100's built-in MMU is idle: the nX address watch below would read
 		// empty memory. Replace it with a live view into the SH4 plugin's flash.
 		if (casioemu::cg100info::IsActive()) {
-			ToolUi::Section("CG100 / SH4 flash viewer");
+			ToolUi::Section("SH4 board flash viewer");
 			ToolUi::Description("Browse the emulated 32 MiB flash. The nX MMU address watch is not available for this core.");
 			{
 				ToolUi::PanelScope panel("##mem_cg100_hex");
@@ -70,9 +70,9 @@ public:
 				}
 				else {
 					ImGui::TextWrapped("Raw flash reads require the emulated USB MSC to be connected "
-						"(cg100_usb_plug). It is not connected in this session, so no live bytes are "
-						"shown. The FAT12 volume summary and flash map below are reference data from "
-						"MEMORY_FILESYSTEMS.md.");
+						"(the core's C ABI plug export). It is not connected in this session, so no "
+						"live bytes are shown. Board-specific reference data below is only shown "
+						"when the active board's descriptor declares a known layout.");
 				}
 			}
 			ToolUi::Section("FAT12 volume (fls0)");

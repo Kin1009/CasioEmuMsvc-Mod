@@ -19,6 +19,7 @@
 #include "ModelResourceStore.h"
 #include "QrCode.h"
 #include "Plugin/IArchitectureProvider.h"
+#include "Plugin/ArchDescriptor.h"
 
 namespace casioemu {
 	class Chipset;
@@ -107,11 +108,14 @@ namespace casioemu {
 		SpriteInfo interface_background;
 		SDL_Rect emu_rect{};
 
-		// Optional plugin-provided architecture core (e.g. SH4 / CG100).
-		// When set, Frame()/Tick()/UIEvent() delegate to this core while the
-		// normal single-window IDE skin, ImGui debugger tabs and the Calculator
-		// dock panel remain fully intact. The core's framebuffer is composited
-		// into the LCD rectangle of the model skin.
+		// Optional plugin-provided architecture core (any architecture: SH4 and
+		// future boards alike). When set, Frame()/Tick()/UIEvent() delegate to
+		// this core while the normal single-window IDE skin, ImGui debugger tabs
+		// and the Calculator dock panel remain fully intact. The core's
+		// framebuffer is composited into the LCD rectangle of the model skin.
+		// `arch_descriptor` is the data-driven board descriptor (never a
+		// per-board code branch) that selected this core.
+		arch::Descriptor arch_descriptor{};
 		std::atomic<IEmulatorCore*> arch_core{nullptr};
 		SDL_Texture* arch_lcd_texture = nullptr;
 		int arch_lcd_tex_w = 0;
@@ -159,6 +163,11 @@ namespace casioemu {
 		void RemoveButtonHighlight(const Rect& rect);
 
 		void SetArchitectureCore(IEmulatorCore* core);
+		// Descriptor that selected the architecture core. Data-driven; set by
+		// the host before the core is attached and also derived internally in
+		// the constructors so clock/framebuffer setup is board-agnostic.
+		void SetArchDescriptor(const arch::Descriptor& descriptor) { arch_descriptor = descriptor; }
+		const arch::Descriptor& GetArchDescriptor() const { return arch_descriptor; }
 
 		/**
 		 * A bunch of internally used methods for encapsulation purposes.
@@ -244,7 +253,7 @@ namespace casioemu {
 		// in single-window builds, where there is no emulator window rectangle.
 		void ModelMouseEvent(int model_x, int model_y, bool down);
 
-		// --- Plugin architecture-core UI macro helpers (CG100 diag button) -----
+		// --- Plugin architecture-core UI macro helpers (board diag button) -----
 		// Thin wrappers over the plugin's plain-C exports. They press real keys
 		// and read the real screen; no diagnostic mode is implemented here.
 		bool HasArchitectureCore() const { return arch_core.load(std::memory_order_acquire) != nullptr; }
@@ -264,7 +273,7 @@ namespace casioemu {
 		// no injected output -- the plugin patches real state and reboots.
 		void ArchEnterDiag(int mode);
 
-		// --- Board-model pressed-key highlight (CG100) -------------------------
+		// --- Board-model pressed-key highlight (architecture cores) ------------
 		// The arch/board path has no Keyboard::Frame(), so the Calculator panel
 		// draws the dark overlay itself from these accessors. All rectangles are
 		// in face/model (skin) pixel coordinates.

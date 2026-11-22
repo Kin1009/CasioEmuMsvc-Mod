@@ -10,6 +10,18 @@ class PluginApi;  // forward declaration: keep this header safe to include from 
 // Global architecture-provider registry (owned by PluginMan.cpp).
 casioemu::IArchitectureRegistry* GetArchitectureRegistry();
 
+/// Find a provider by its stable GetId() string. This is the data-driven
+/// dispatch used by the architecture descriptor (config `arch_provider`). It
+/// scans the existing v1 registry via GetProvider()/GetId(), so no virtual
+/// interface change is required and legacy plugins keep working unchanged.
+casioemu::IArchitectureProvider* FindArchitectureProviderById(const char* id);
+
+/// Register a statically-linked architecture provider (first-party cores, and
+/// the ONLY way iPadOS can supply one because dlopen is forbidden there). This
+/// is the single generic hook a future CG50 static SH4 core calls once at
+/// startup; no board name or hardware id is baked into the host.
+bool RegisterStaticArchitectureProvider(casioemu::IArchitectureProvider* provider);
+
 struct PluginInfo {
     std::string id;
     std::string name;

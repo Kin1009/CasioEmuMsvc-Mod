@@ -1,5 +1,10 @@
 # CasioEmuMsvc — iOS Port Plan (PLAN ONLY)
 
+> **SH4 integration is now data-driven.** See `ARCH_DESCRIPTOR_FORMAT.md` in
+> this directory: board models are selected/dispatched by a config descriptor,
+> not by a CG100 hardware id. The CG100-specific notes in §5 below are historical
+> planning context; the implemented mechanism is the descriptor format.
+
 > **Status:** planning document. No iOS build, no device/simulator run and no
 > source changes were performed for this task. The host is an **Intel x86_64
 > Mac**; it can cross-compile an `arm64` iOS binary with Xcode but cannot

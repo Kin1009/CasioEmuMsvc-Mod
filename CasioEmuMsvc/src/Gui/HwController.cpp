@@ -23,15 +23,15 @@ void HwController::RenderCore() {
 	const bool cg100_arch = casioemu::cg100info::IsActive();
 
 	if (cg100_arch) {
-		ToolUi::Section("CG100 / SH4 architecture core");
+		ToolUi::Section("SH4 architecture core");
 		{
 			ToolUi::PanelScope panel("##hw_cg100_core");
 			casioemu::cg100info::RenderCoreStatus();
 			ImGui::Spacing();
 			ToolUi::Field("MMIO registers");
 			ImGui::TextWrapped("PFC / KEYSC / RTC / ETMU / flash-controller registers live inside "
-				"CG100SH4.plugin. IEmulatorCore exposes no MMIO query API, so their values are "
-				"not shown instead of being guessed.");
+				"the architecture provider core. IEmulatorCore exposes no MMIO query API, so "
+				"their values are not shown instead of being guessed.");
 			ImGui::Spacing();
 			ToolUi::Field("Flash map (reference)");
 			casioemu::cg100info::RenderFlashMap();
