@@ -72,16 +72,20 @@ namespace casioctl {
 			return *keyboard;
 		}
 
-		// A plugin architecture core (CG100) owns the keypad; the generic
-		// IKeyboard interface is backed by the built-in chipset, which is not
-		// connected to that core. Route casioctl injection through the SAME
-		// held-matrix API the GUI uses so keys actually reach the emulated OS.
-		// No diagnostic logic is added here -- this is only key transport.
+		// An architecture core owns the keypad; the generic IKeyboard interface
+		// is backed by the built-in chipset, which is not connected to that core.
+		// Route casioctl injection through the SAME held-matrix API the GUI uses
+		// so keys actually reach the emulated OS. The ON/contact coordinates come
+		// from the board descriptor (legacy CG100 default 6/9), so new boards do
+		// not need a code change here. No diagnostic logic is added.
 		bool ArchKeyFromCode(casioemu::Emulator& emulator, uint8_t code, int& row, int& col) {
 			if (!emulator.HasArchitectureCore())
 				return false;
 			if (code == static_cast<uint8_t>(casioemu::BUTTON_KIKO_POWER)) {
-				row = 6; col = 9; // hardware-verified ON contact on CG100
+				const casioemu::arch::Descriptor descriptor =
+					casioemu::arch::FromModel(emulator.ModelDefinition);
+				row = descriptor.power_key_row;
+				col = descriptor.power_key_col;
 				return true;
 			}
 			row = (code >> 4) & 0x0f;

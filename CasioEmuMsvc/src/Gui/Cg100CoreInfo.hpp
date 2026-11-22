@@ -1,27 +1,29 @@
 #pragma once
-// CG100 / SH4 architecture-plugin debugger helpers (host side).
+// Architecture-core debugger helpers (host side).
 //
-// The CG100 model is driven by an IEmulatorCore created by CG100SH4.plugin,
-// NOT by the built-in nX-U16/U8 chipset.  The built-in MMU/RAM/ROM arrays are
-// therefore empty for it.  These helpers expose only what the host can
-// honestly display:
+// Board models are driven by an IEmulatorCore created by an architecture
+// provider, NOT by the built-in nX-U16/U8 chipset. The built-in MMU/RAM/ROM
+// arrays are therefore empty for them. These helpers expose only what the host
+// can honestly display:
 //
 //   * core identity + status from the C++ IEmulatorCore interface;
-//   * the live counters exported by the plugin's plain-C ABI, when the plugin
-//     provides the optional `casioemu_arch_core_handle` accessor;
-//   * the CG100 flash/FAT12 layout documented in MEMORY_FILESYSTEMS.md.
+//   * the live counters exported by the plugin's plain-C ABI, with the symbol
+//     prefix taken from the board descriptor (legacy SH4 pack: "cg100_*");
+//   * the CG100 flash/FAT12 layout, shown ONLY for the legacy CG100 pack.
 //
-// Fields the plugin does not expose (SH4 registers, MMIO registers such as
-// PFC/KEYSC/RTC/ETMU/flash controller) are explicitly labelled unavailable -
-// we never invent values for them.
+// Namespace `cg100info` is kept as a compatibility shim; `archinfo` is the
+// generic alias for new call sites. Fields the plugin does not expose (SH4
+// registers, MMIO registers such as PFC/KEYSC/RTC/ETMU/flash controller) are
+// explicitly labelled unavailable - we never invent values for them.
 //
 // Header-only on purpose: the desktop target globs Gui/*.cpp without
 // CONFIGURE_DEPENDS, so adding a new translation unit would need a CMake
 // reconfigure.  Everything below is inline.
 
 #include "Ui.hpp"                       // ::m_emu, Emulator, IEmulatorCore
-#include "ModelInfo.h"                  // HW_CG100
+#include "ModelInfo.h"                  // HW_ARCH (legacy alias HW_CG100)
 #include "Plugin/IArchitectureProvider.h"
+#include "Plugin/ArchDescriptor.h"      // data-driven board descriptor
 #include "imgui/imgui.h"
 
 #include <cstdint>
@@ -37,13 +39,33 @@
 namespace casioemu {
 namespace cg100info {
 
-// True only for a live CG100 session whose SH4 plugin core is attached.
+// True for ANY live architecture-core (board) session. Previously this was
+// gated on hardware_id == HW_CG100; the descriptor makes that check obsolete,
+// so a future CG50 board automatically gets the same generic debug surface.
 inline bool IsActive() {
-	return ::m_emu && ::m_emu->hardware_id == HW_CG100 && ::m_emu->arch_core.load() != nullptr;
+	return ::m_emu && ::m_emu->arch_core.load() != nullptr;
 }
 
 inline IEmulatorCore* Core() {
 	return IsActive() ? ::m_emu->arch_core.load() : nullptr;
+}
+
+// The data-driven descriptor for the active board (empty when none).
+inline const arch::Descriptor& Desc() {
+	static const arch::Descriptor fallback{};
+	return ::m_emu ? ::m_emu->arch_descriptor : fallback;
+}
+
+// True only for the legacy CG100 SH4 pack, i.e. the data whose flash map / FAT12
+// layout documented in MEMORY_FILESYSTEMS.md applies. New boards get generic
+// placeholders rather than CG100-specific addresses.
+inline bool IsLegacyCg100() {
+	return IsActive() && arch::IsLegacyCg100(Desc());
+}
+
+// Build an optional C ABI symbol name from the descriptor's prefix.
+inline std::string CabiName(const char* suffix) {
+	return arch::CabiSymbol(Desc(), suffix);
 }
 
 inline void* Resolve(const char* name) {
@@ -100,12 +122,14 @@ inline Info Read() {
 	out.handle = Handle();
 	out.abi = out.handle != nullptr;
 	if (out.abi) {
-		static U64Fn cycles_fn = Symbol<U64Fn>("cg100_cycles");
-		static U64Fn pushes_fn = Symbol<U64Fn>("cg100_pushes");
-		static StrFn fault_fn = Symbol<StrFn>("cg100_fault");
-		static IntFn usb_fn = Symbol<IntFn>("cg100_usb_status");
-		static StrFn usb_text_fn = Symbol<StrFn>("cg100_usb_status_text");
-		static ListFn list_fn = Symbol<ListFn>("cg100_usb_list");
+		// Counter symbol prefix comes from the board descriptor; the legacy
+		// SH4 pack resolves to "cg100_*" (behaviour preserved).
+		U64Fn cycles_fn = Symbol<U64Fn>(CabiName("cycles").c_str());
+		U64Fn pushes_fn = Symbol<U64Fn>(CabiName("pushes").c_str());
+		StrFn fault_fn = Symbol<StrFn>(CabiName("fault").c_str());
+		IntFn usb_fn = Symbol<IntFn>(CabiName("usb_status").c_str());
+		StrFn usb_text_fn = Symbol<StrFn>(CabiName("usb_status_text").c_str());
+		ListFn list_fn = Symbol<ListFn>(CabiName("usb_list").c_str());
 		if (cycles_fn)
 			out.cycles = cycles_fn(out.handle);
 		if (pushes_fn)
@@ -131,7 +155,7 @@ inline Info Read() {
 inline bool ReadRaw(uint32_t addr, uint8_t* out, int n) {
 	if (!Handle() || !out || n <= 0)
 		return false;
-	static ReadRawFn read_fn = Symbol<ReadRawFn>("cg100_usb_read_raw");
+	ReadRawFn read_fn = Symbol<ReadRawFn>(CabiName("usb_read_raw").c_str());
 	return read_fn && read_fn(Handle(), addr, out, n) == n;
 }
 
@@ -155,7 +179,9 @@ inline void RenderCoreStatus(bool compact = false) {
 	const Info info = Read();
 	Row("Provider core", info.core_id ? info.core_id : "unavailable");
 	Row("Core status", info.status ? info.status : "unavailable");
-	Row("C ABI bridge", info.abi ? "live (cg100_* exports)" : "not exported by plugin build");
+	Row("C ABI bridge", info.abi
+		? std::string("live (") + Desc().cabi_prefix + "* exports)"
+		: std::string("not exported by plugin build"));
 	Row("Cycles", info.abi ? Hex(info.cycles) : "unavailable");
 	Row("LCD presents", info.abi ? std::to_string(info.pushes) : "unavailable");
 	if (info.abi) {
@@ -178,7 +204,13 @@ inline void RenderCoreStatus(bool compact = false) {
 }
 
 // Static CG100 flash map from MEMORY_FILESYSTEMS.md (no live values implied).
+// Shown only for the legacy CG100 pack; other boards have a different layout
+// and must not be described with CG100 addresses.
 inline void RenderFlashMap() {
+	if (!IsLegacyCg100()) {
+		ImGui::TextDisabled("No flash-map descriptor for this board; layout unavailable.");
+		return;
+	}
 	ImGui::TextDisabled("Boot 0x00000000-0x0001FFFF  (128 KiB boot code)");
 	ImGui::TextDisabled("OS   0x00020000-0x000B5FFF  (CASIOWIN / youkan 2.00)");
 	ImGui::TextDisabled("Marker 0x00B20000 (4 B state record)");
@@ -188,6 +220,10 @@ inline void RenderFlashMap() {
 }
 
 inline void RenderFat12Summary() {
+	if (!IsLegacyCg100()) {
+		ImGui::TextDisabled("No filesystem descriptor for this board; layout unavailable.");
+		return;
+	}
 	const Info info = Read();
 	ImGui::TextDisabled("Label 'CASIO'  FAT12  512 B/sector  8 sectors/cluster (4 KiB)");
 	ImGui::TextDisabled("2 FATs: 0x00C85000 / 0x00C85800   root 0x00C86000   data 0x00C8A000");
@@ -208,4 +244,9 @@ inline void RenderFat12Summary() {
 }
 
 } // namespace cg100info
+
+// Generic alias: new code should prefer `archinfo`; `cg100info` is retained as
+// a compatibility shim so existing GUI call sites keep compiling unchanged.
+namespace archinfo = cg100info;
+
 } // namespace casioemu

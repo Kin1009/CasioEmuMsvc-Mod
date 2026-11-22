@@ -64,6 +64,16 @@ The `.app` is **standalone**: it ships the model files (`models/fx-580VN X`, `mo
 the compiler data and the example library inside `Contents/Resources`. Nothing outside the bundle
 is needed.
 
+### iPadOS (sideload)
+
+The `port/ipados` branch builds a sideloaded iPadOS app. Run `./build-ipados.sh`
+from a Mac with Xcode to produce
+`build-ipados/CasioEmuMsvc/CasioEmuMsvc.app` (simulator, ad-hoc signed); add
+`--device --team-id … --identity … --ipa` for a device IPA. The iPadOS build is
+interpreter-only with data-only plugins — JIT and native `dlopen` plugins are
+not available. See [docs/IPADOS_PORT.md](docs/IPADOS_PORT.md) for prerequisites,
+the exact CMake flags and install steps.
+
 ---
 
 ## 🧰 The Wiz tab

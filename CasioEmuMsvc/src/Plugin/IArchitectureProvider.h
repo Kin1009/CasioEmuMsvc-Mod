@@ -12,13 +12,16 @@
 //     for CASIOEMU_ARCH_REGISTRY_NAME.
 //   * PluginMan owns the registry implementation and calls fPluginLoadArch()
 //     during the early (pre-Emulator) plugin pass.
-//   * casioemu.cpp, when ModelDefinition.hardware_id == HW_CG100 (10), asks the
-//     registry for a provider, creates an IEmulatorCore and delegates Tick(),
-//     RenderFrame() and key input to it instead of the built-in chipset.
+//   * casioemu.cpp, when a model's architecture descriptor (see
+//     Plugin/ArchDescriptor.h) marks it as a board model, asks the registry for
+//     a provider BY ID (config `arch_provider`), creates an IEmulatorCore and
+//     delegates Tick(), RenderFrame() and key input to it instead of the
+//     built-in chipset. No board is special-cased by hardware id or name.
 //
-// The CG100 core uses a fixed 396x224 big-endian RGB565 framebuffer. The
-// plugin's RenderFrame() implementation is responsible for converting it to
-// the texture format expected by the SDL_Renderer passed in ArchFrameInfo.
+// Framebuffer geometry and cycle budget come from the descriptor (defaults:
+// 396x224, 200 MHz for the legacy SH4 core). The plugin's RenderFrame()
+// implementation is responsible for converting the core's native pixel format
+// to the texture format expected by the SDL_Renderer in ArchFrameInfo.
 
 #include <cstddef>
 #include <cstdint>
@@ -47,14 +50,21 @@ namespace casioemu {
 	struct ArchInitInfo {
 		const char* model_path{nullptr};    ///< directory containing config.bin
 		const char* flash_path{nullptr};    ///< absolute path to the 32 MiB flash image
-		const char* rom_path{nullptr};      ///< may be nullptr/empty for CG100
-		uint16_t hardware_id{0};           ///< HW_CG100 == 10
+		const char* rom_path{nullptr};      ///< may be nullptr/empty for board cores
+		uint16_t hardware_id{0};           ///< reserved HW_ARCH id (legacy plugins may still key on 10/14)
 		void* renderer{nullptr};           ///< SDL_Renderer* (opaque here)
 		int lcd_x{0};                      ///< LCD rectangle inside the interface sprite
 		int lcd_y{0};
 		int lcd_w{0};
 		int lcd_h{0};
 		uint32_t reserved{0};
+		// Descriptor fields appended AFTER the v1 layout: old plugins read only
+		// the prefix, so this stays ABI-compatible while giving new cores the
+		// board identity and geometry without extra lookups.
+		const char* provider_id{nullptr};  ///< config `arch_provider`
+		const char* architecture{nullptr}; ///< config `arch_architecture` (e.g. "sh4")
+		uint32_t fb_width{0};              ///< 0 => core default
+		uint32_t fb_height{0};
 	};
 
 	/// Where the core should draw its framebuffer. The host has already bound
@@ -78,8 +88,9 @@ namespace casioemu {
 		/// Advance the machine by one host time slice (called from the tick thread).
 		virtual void Tick() = 0;
 		/// Draw the live framebuffer into the currently bound render target.
-		/// Implementations must convert big-endian RGB565 (CG100: 396x224) to
-		/// the SDL texture format (e.g. RGBA8888) before uploading.
+		/// Implementations must convert their native pixel format/geometry (the
+		/// legacy SH4 core used big-endian RGB565, 396x224) to the SDL texture
+		/// format (e.g. RGBA8888) before uploading.
 		virtual void RenderFrame(const ArchFrameInfo& info) = 0;
 		virtual void Key(ArchKey key, bool pressed) = 0;
 		virtual void ReleaseAll() = 0;

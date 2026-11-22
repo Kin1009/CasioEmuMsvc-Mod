@@ -1,5 +1,11 @@
 # iPadOS port — CasioEmuMsvc
 
+> **SH4 integration is now data-driven.** See `ARCH_DESCRIPTOR_FORMAT.md` in
+> this directory. On iPadOS a static architecture provider is registered once
+> through the generic `RegisterStaticArchitectureProvider()` hook (there is no
+> `dlopen`); the config `arch_provider` key selects it. Adding e.g. an fx-CG50
+> board is a model-pack-only change, with no host source edit.
+
 This branch (`port/ipados`) adds a real iPadOS application target to the
 CasioEmuMsvc macOS tree. It is deliberately conservative: iPadOS forbids JIT,
 unsigned executable memory and `dlopen()` of arbitrary code, so the port ships
@@ -39,8 +45,25 @@ cmake -S . -B build-ipados -G Ninja \
 cmake --build build-ipados --target CasioEmuMsvc
 ```
 
-The same configure/build/install sequence is wrapped in
-`ipados/build-ipados.sh [device-UDID]`.
+The same configure/build/install sequence is wrapped in the canonical driver
+`./build-ipados.sh` at the repository root (a thin compatibility wrapper remains
+at `ipados/build-ipados.sh [simulator-UDID]`):
+
+```bash
+./build-ipados.sh --check                       # verify an existing .app (read-only)
+./build-ipados.sh --dry-run                     # print the exact CMake/codesign commands
+IPHONE_SIMULATOR_SDK=<sdk> ./build-ipados.sh     # simulator build
+./build-ipados.sh --install booted --launch --screenshot shot.png
+./build-ipados.sh --device --team-id TEAM --identity "Apple Development: ..." --ipa
+```
+
+The driver verifies that all resources / data-only plugins landed in the bundle
+(themes, locales, `wiz/`, `docs/`, `roms.db`, `Plugins/*/plugin.json`), rejects a
+`Resources/` directory, copies `ipados/AppIcon.png` into the bundle, ad-hoc signs
+simulator builds, and prints exact install / sideload next steps. Device builds
+require a full Xcode install, a real `iphoneos` SDK, `--team-id` and
+`--identity`; they are signed with `ipados/CasioEmuMsvc.entitlements`, and
+`--ipa` packages the signed app for AltStore / Sideloadly / Xcode.
 
 `CURL_*` flags are needed because the bundled curl FetchContent build otherwise
 picks up the **macOS Homebrew** OpenSSL/libidn2 and fails to link for iOS.
@@ -157,6 +180,7 @@ The CG100 model in this repository is driven by an **external Go-built
 | Full compile + link of `CasioEmuMsvc` iPadOS target | PASS — 22 MB Mach-O x86_64 simulator executable |
 | App bundle contents (Info.plist, locales, themes, wiz docs, bundled plugin) | PASS |
 | `codesign --force --deep --sign -` | PASS |
+| App icon bundled (`AppIcon.png` + `CFBundleIconFile`) | Fixed in this worktree — CMake copies the icon and `ipados/Info.plist` declares it; the earlier verification bundle had the icon added manually only for testing. |
 | `xcrun simctl install <iPad Pro 13-in> <app>` | PASS |
 | `xcrun simctl launch` / screenshot | See final report `PORT_IPADOS_FINAL.md` (launch verification in progress at time of writing). |
 

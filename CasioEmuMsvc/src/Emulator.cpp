@@ -243,11 +243,10 @@ namespace casioemu {
 			return interval > kMaxSliceMs ? kMaxSliceMs : interval;
 		}
 
-		// CG100 is driven by an architecture-plugin SH4 core (Go). Its budget is
-		// 200 MIPS; the plugin passes the same number to cg100_set_ips() so the
-		// core's RTC/KEYSC time base agrees with the host clock.
-		constexpr unsigned int kCg100CyclesPerSecond = 200000000;
-
+		// Architecture-core board models use a descriptor-provided cycle budget
+		// (arch::kDefaultCycleBudget = 200 MHz for the legacy SH4 core). The
+		// legacy plugin passes the same number to its core so the RTC/KEYSC time
+		// base agrees with the host clock. See Plugin/ArchDescriptor.h.
 		unsigned int GetLimitedCyclesPerSecond(int hardware_id) {
 			switch (hardware_id) {
 			// case HW_FX_5800P:
@@ -464,11 +463,12 @@ namespace casioemu {
 			eps_timer1_source_hz = GetEpsTimer1SourceHz(ModelDefinition);
 		}
 		if (hardware_id == HW_TI_MULTI_VIEW) cycles_per_second = 1000000; // Microsecond scheduling, as in the reference JS.
-		// Board models (HW_CG100) use the plugin SH4 core, not the built-in
-		// chipset. Give it the full 200 MIPS budget instead of the 8 MHz
-		// full-speed default above.
-		if (hardware_id == HW_CG100)
-			cycles_per_second = kCg100CyclesPerSecond;
+		// Data-driven board models use an architecture core, not the built-in
+		// chipset. The budget comes from the model descriptor (200 MHz default),
+		// so adding a future board (e.g. CG50) needs no change here.
+		arch_descriptor = arch::FromModel(ModelDefinition);
+		if (arch::IsBoardModel(ModelDefinition))
+			cycles_per_second = arch::CycleBudget(arch_descriptor);
 		timer_interval = GetTimerInterval(hardware_id);
 		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW)
 			timer_interval = SliceTimerInterval(timer_interval);
@@ -476,7 +476,7 @@ namespace casioemu {
 		cycles.Setup(cycles_per_second, timer_interval);
 		// Board models (e.g. the SH4 CG100 pack) are driven by a plugin
 		// architecture core; leave the built-in chipset completely idle.
-		if (ModelDefinition.board_path.empty())
+		if (!arch::IsBoardModel(ModelDefinition))
 			chipset.Setup();
 
 		BatteryVoltage = 1.5;
@@ -545,7 +545,7 @@ namespace casioemu {
 		cycles.Reset();
 		// EPS reset clears CPU/SFR state but preserves its RAM image. Do this before
 		// the worker starts so firmware sees a clean reset with the restored RAM.
-		if ((IsEpsFamily(hardware_id) || hardware_id == HW_TI_MULTI_VIEW) && ModelDefinition.board_path.empty())
+		if ((IsEpsFamily(hardware_id) || hardware_id == HW_TI_MULTI_VIEW) && !arch::IsBoardModel(ModelDefinition))
 			chipset.Reset();
 		if ((IsEpsFamily(hardware_id) || hardware_id == HW_TI_MULTI_VIEW) && argv_map.find("paused") != argv_map.end())
 			SetPaused(true);
@@ -610,7 +610,7 @@ namespace casioemu {
 
 		RunStartupScript();
 
-		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW && ModelDefinition.board_path.empty())
+		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW && !arch::IsBoardModel(ModelDefinition))
 			chipset.Reset();
 
 		if (argv_map.find("paused") != argv_map.end())
@@ -641,11 +641,12 @@ namespace casioemu {
 			eps_timer1_source_hz = GetEpsTimer1SourceHz(ModelDefinition);
 		}
 		if (hardware_id == HW_TI_MULTI_VIEW) cycles_per_second = 1000000; // Microsecond scheduling, as in the reference JS.
-		// Board models (HW_CG100) use the plugin SH4 core, not the built-in
-		// chipset. Give it the full 200 MIPS budget instead of the 8 MHz
-		// full-speed default above.
-		if (hardware_id == HW_CG100)
-			cycles_per_second = kCg100CyclesPerSecond;
+		// Data-driven board models use an architecture core, not the built-in
+		// chipset. The budget comes from the model descriptor (200 MHz default),
+		// so adding a future board (e.g. CG50) needs no change here.
+		arch_descriptor = arch::FromModel(ModelDefinition);
+		if (arch::IsBoardModel(ModelDefinition))
+			cycles_per_second = arch::CycleBudget(arch_descriptor);
 		timer_interval = GetTimerInterval(hardware_id);
 		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW)
 			timer_interval = SliceTimerInterval(timer_interval);
@@ -653,7 +654,7 @@ namespace casioemu {
 		cycles.Setup(cycles_per_second, timer_interval);
 		// Board models (e.g. the SH4 CG100 pack) are driven by a plugin
 		// architecture core; leave the built-in chipset completely idle.
-		if (ModelDefinition.board_path.empty())
+		if (!arch::IsBoardModel(ModelDefinition))
 			chipset.Setup();
 
 		BatteryVoltage = 1.5;
@@ -714,7 +715,7 @@ namespace casioemu {
 		cycles.Reset();
 		// EPS reset clears CPU/SFR state but preserves its RAM image. Do this before
 		// the worker starts so firmware sees a clean reset with the restored RAM.
-		if ((IsEpsFamily(hardware_id) || hardware_id == HW_TI_MULTI_VIEW) && ModelDefinition.board_path.empty())
+		if ((IsEpsFamily(hardware_id) || hardware_id == HW_TI_MULTI_VIEW) && !arch::IsBoardModel(ModelDefinition))
 			chipset.Reset();
 		if (!headless) {
 		#ifdef __EMSCRIPTEN__
@@ -779,7 +780,7 @@ namespace casioemu {
 			RunStartupScript();
 		}
 
-		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW && ModelDefinition.board_path.empty())
+		if (!IsEpsFamily(hardware_id) && hardware_id != HW_TI_MULTI_VIEW && !arch::IsBoardModel(ModelDefinition))
 			chipset.Reset();
 	}
 
@@ -807,8 +808,8 @@ namespace casioemu {
 		arch_enter_diag_fn = reinterpret_cast<ArchEnterDiagFn>(
 			dlsym(RTLD_DEFAULT, "casioemu_arch_core_enter_diag"));
 		// Held-key bridge used by the Calculator panel's "To diagnostics mode"
-		// macro button. These exports already exist in CG100SH4.plugin; no
-		// emulator-side diagnostic logic is added.
+		// macro button. These exports are part of the generic architecture-core
+		// C ABI; no emulator-side diagnostic logic is added.
 		arch_key_down_fn = reinterpret_cast<ArchHeldKeyFn>(
 			dlsym(RTLD_DEFAULT, "casioemu_arch_core_key_down"));
 		arch_key_up_fn = reinterpret_cast<ArchHeldKeyFn>(
@@ -1119,7 +1120,7 @@ namespace casioemu {
 	}
 
 	void Emulator::SetupInternals() {
-		if (ModelDefinition.board_path.empty())
+		if (!arch::IsBoardModel(ModelDefinition))
 			chipset.SetupInternals();
 		else
 			// Board models keep the built-in CPU idle, but the debugger GUI
@@ -1232,12 +1233,14 @@ namespace casioemu {
 	void Emulator::Frame() {
 		// Draws either the plugin architecture core's framebuffer into the LCD
 		// rectangle of the model skin, or the built-in chipset. Used at all three
-		// Frame() presentation sites so the CG100 appears in the calculator panel
-		// of the single main IDE window (no separate SDL window).
+		// Frame() presentation sites so any board model appears in the calculator
+		// panel of the single main IDE window (no separate SDL window).
 		auto draw_core_or_chipset = [this]() {
 			if (IEmulatorCore* core = arch_core.load()) {
-				constexpr int kFbW = 396;
-				constexpr int kFbH = 224;
+				// Geometry is descriptor-driven; defaults preserve the legacy
+				// SH4 core's 396x224 framebuffer.
+				const int kFbW = static_cast<int>(arch::FramebufferWidth(arch_descriptor));
+				const int kFbH = static_cast<int>(arch::FramebufferHeight(arch_descriptor));
 				SDL_Rect lcd{89, 251, 812, 468};
 				auto it = ModelDefinition.sprites.find("rsd_pixel");
 				if (it != ModelDefinition.sprites.end())
@@ -1252,8 +1255,17 @@ namespace casioemu {
 					arch_lcd_tex_h = kFbH;
 				}
 				if (arch_lcd_texture && arch_framebuffer_fn) {
-					static std::vector<unsigned char> fb((size_t)kFbW * kFbH * 4);
-					if (arch_framebuffer_fn(core, fb.data(), (int)fb.size())) {
+					// Resize when board geometry changes. A static buffer sized
+					// once for the legacy 396x224 core would be stale for a
+					// descriptor-driven board with different dimensions (or a
+					// second emulator in the same process): the core would be
+					// given the old byte count and SDL_UpdateTexture would use
+					// the new pitch -> out-of-bounds read.
+					static std::vector<unsigned char> fb;
+					const size_t fb_bytes = (size_t)kFbW * (size_t)kFbH * 4u;
+					if (fb.size() != fb_bytes)
+						fb.assign(fb_bytes, 0);
+					if (arch_framebuffer_fn(core, fb.data(), (int)fb_bytes)) {
 						SDL_UpdateTexture(arch_lcd_texture, nullptr, fb.data(), kFbW * 4);
 						SDL_RenderCopy(renderer, arch_lcd_texture, nullptr, &lcd);
 					}
@@ -1347,7 +1359,7 @@ namespace casioemu {
 		return;
 #else
 		// std::lock_guard<decltype(access_mx)> access_lock(access_mx);
-		const bool board_interface = !ModelDefinition.board_path.empty() &&
+		const bool board_interface = arch::IsBoardModel(ModelDefinition) &&
 			interface_background.dest.w > 0 && interface_background.dest.h > 0;
 		if (board_interface) {
 			int w, h;
@@ -1462,9 +1474,9 @@ namespace casioemu {
 	void Emulator::Tick() {
 		// A plugin architecture core must never touch the built-in chipset: its
 		// peripherals were never initialised for this model. The old 16 ms gate
-		// capped the SH4 core at ~30 M cycles/s; with the 200 MIPS CG100 budget
-		// only yield 1 ms between slices, so the core runs at full speed while
-		// access_mx is briefly released for the UI thread.
+		// capped the legacy SH4 core at ~30 M cycles/s; with the descriptor's
+		// 200 MHz default budget yield 1 ms between slices, so the core runs at
+		// full speed while access_mx is briefly released for the UI thread.
 		if (IEmulatorCore* core = arch_core.load()) {
 			const Uint32 now = SDL_GetTicks();
 			if (now - last_arch_tick_ms >= 1) {
@@ -1534,8 +1546,8 @@ namespace casioemu {
 	}
 
 	void Emulator::ResetToMainMenu() {
-		// Architecture-core models (e.g. fx-CG100 / SH4) never set up the
-		// built-in chipset, so chipset.Reset() below would touch uninitialised
+		// Architecture-core (board) models never set up the built-in chipset,
+		// so chipset.Reset() below would touch uninitialised
 		// state and leave the calculator apparently unchanged. Reboot through
 		// the core so it restarts from its reset vector. This single guard
 		// covers every ResetToMainMenu() caller (Settings/Run state, Shell,

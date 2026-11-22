@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 #if defined(__APPLE__) || defined(__linux__)
@@ -57,6 +58,22 @@ namespace {
 
 casioemu::IArchitectureRegistry* GetArchitectureRegistry() {
 	return &g_archRegistry;
+}
+
+casioemu::IArchitectureProvider* FindArchitectureProviderById(const char* id) {
+	if (!id || !*id)
+		return nullptr;
+	casioemu::IArchitectureRegistry* registry = GetArchitectureRegistry();
+	for (size_t i = 0, n = registry->GetProviderCount(); i < n; ++i) {
+		casioemu::IArchitectureProvider* provider = registry->GetProvider(i);
+		if (provider && provider->GetId() && std::strcmp(provider->GetId(), id) == 0)
+			return provider;
+	}
+	return nullptr;
+}
+
+bool RegisterStaticArchitectureProvider(casioemu::IArchitectureProvider* provider) {
+	return GetArchitectureRegistry()->RegisterProvider(provider);
 }
 
 #if defined(__APPLE__) || defined(__linux__)

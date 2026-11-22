@@ -12,6 +12,17 @@
     <key>CFBundleShortVersionString</key><string>1.1.0</string>
     <key>CFBundleVersion</key><string>1.1.0</string>
     <key>CFBundleSignature</key><string>????</string>
+    <!-- A sideloaded iPadOS app needs an icon in the bundle root.  AppIcon.png
+         is copied there by CasioEmuMsvc/CMakeLists.txt for iPadOS targets. -->
+    <key>CFBundleIconFile</key><string>AppIcon.png</string>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array><string>AppIcon.png</string></array>
+        </dict>
+    </dict>
     <key>LSMinimumSystemVersion</key><string>16.0</string>
     <key>MinimumOSVersion</key><string>16.0</string>
 
