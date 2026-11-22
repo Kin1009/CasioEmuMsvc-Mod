@@ -598,4 +598,6 @@ Shell.Pause=Pause
 Shell.Resume=Resume
 Shell.Run=Run
 Shell.Palette=Palette
+Shell.AllModels=All models
+Tool.CG100Controls=CG100 Controls
 placeholder2=a)"
