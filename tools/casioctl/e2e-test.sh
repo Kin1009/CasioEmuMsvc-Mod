@@ -81,6 +81,23 @@ for _ in $(seq 1 600); do
 done
 [ "$READY" = 1 ] || fail "control session was not published within 30s"
 
+# The session file is published on the first UI frame (CtlServer::OnFrame),
+# before the in-process debugger plugin is necessarily ready. On slower
+# machines the first "hello" then times out or reports debugger=no. Wait for
+# the capability handshake to confirm the debugger before driving the suite.
+DBG_READY=0
+for _ in $(seq 1 300); do
+    if ! kill -0 "$APP_PID" 2>/dev/null; then
+        fail "emulator exited while waiting for the debugger interface"
+    fi
+    if "$CASIOCTL" --timeout 10000 -s "$APP_PID" hello 2>/dev/null | grep -q "debugger   yes"; then
+        DBG_READY=1
+        break
+    fi
+    sleep 0.2
+done
+[ "$DBG_READY" = 1 ] || fail "debugger interface was not ready within 60s"
+
 run() {
     "$CASIOCTL" -s "$APP_PID" "$@" || fail "command failed: $*"
 }

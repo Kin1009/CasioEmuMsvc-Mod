@@ -1,6 +1,6 @@
 #include "CtlServer.hpp"
 
-#if defined(__APPLE__) && !defined(CASIOEMU_WEB) && !defined(__EMSCRIPTEN__) && !defined(CASIOEMU_CORE_WEB)
+#if !defined(_WIN32) && !defined(CASIOEMU_WEB) && !defined(__EMSCRIPTEN__) && !defined(CASIOEMU_CORE_WEB)
 
 #include "CtlCommands.hpp"
 #include "CtlSession.hpp"
@@ -51,6 +51,14 @@ namespace casioemu::ctl {
 		constexpr size_t kMaxLineLength = 4 * 1024 * 1024;
 		constexpr int kMaxRequestsPerFrame = 128;
 		constexpr int kStepStallFrames = 600; // ~10 s at 60 fps
+
+		// macOS/BSD use SO_NOSIGPIPE (set on accept below); Linux has no such
+		// socket option and instead needs MSG_NOSIGNAL on every send().
+#ifdef MSG_NOSIGNAL
+		constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+		constexpr int kSendFlags = 0;
+#endif
 
 		struct Client {
 			uint64_t id = 0;
@@ -275,7 +283,7 @@ namespace casioemu::ctl {
 					}
 					if (keep && (revents & POLLOUT) && !it->second.output.empty()) {
 						const ssize_t sent = ::send(it->second.fd, it->second.output.data(),
-							it->second.output.size(), 0);
+							it->second.output.size(), kSendFlags);
 						if (sent > 0)
 							it->second.output.erase(0, static_cast<size_t>(sent));
 						else if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
