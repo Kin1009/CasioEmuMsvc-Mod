@@ -2,21 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Sandbox is mandatory for App Store iPadOS apps. -->
-    <key>com.apple.security.app-sandbox</key><true/>
+	<!--
+		iOS / iPadOS sideload (development) entitlements.
 
-    <!-- Files the user explicitly picks in UIDocumentPicker. -->
-    <key>com.apple.security.files.user-selected.read-write</key><true/>
-    <key>com.apple.security.files.downloads.read-write</key><true/>
-    <key>com.apple.security.files.pictures.read-write</key><true/>
+		The previous version of this file used *macOS App Sandbox* keys
+		(com.apple.security.app-sandbox, com.apple.security.files.*,
+		com.apple.security.network.client, com.apple.security.cs.allow-jit, ...).
+		Those keys are macOS-only: iOS ignores them AND they are absent from a
+		normal iOS provisioning profile.  Signing an iOS device build with them
+		produces an embedded-entitlements/provisioning-profile mismatch that
+		prevents launch on a real iPad.  iOS apps are sandboxed by default, so
+		no "app-sandbox" entitlement exists or is needed on iPadOS.
 
-    <!-- The optional online model client needs outbound networking. -->
-    <key>com.apple.security.network.client</key><true/>
+		get-task-allow=true is what development/sideload signing tools
+		(AltStore, Sideloadly, Xcode "Run") put in the provisioning profile.
+		The embedded entitlements must be a subset of that profile, which is
+		why this file contains only that one key.  For App Store / ad-hoc
+		distribution signing use CasioEmuMsvc.release.entitlements instead
+		(or no entitlements file at all).
 
-    <!-- JIT / unsigned executable memory is deliberately NOT requested.
-         CASIOEMU_IPADOS builds exclude AsmJit and JitU8 and always use the
-         portable interpreter.  Do not add com.apple.security.cs.allow-jit. -->
-    <key>com.apple.security.cs.allow-jit</key><false/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key><false/>
+		JIT and unsigned executable memory need NO iOS entitlement to be
+		*forbidden* — they simply are not available to third-party iPadOS apps.
+		This port ships the portable interpreter and data-only plugins, so it
+		does not request (and cannot request) any JIT capability.
+	-->
+	<key>get-task-allow</key>
+	<true/>
 </dict>
 </plist>

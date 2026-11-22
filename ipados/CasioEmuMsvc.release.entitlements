@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		Release / distribution variant: no debug entitlement.  get-task-allow
+		must be false or absent when signing with an App Store / ad-hoc
+		distribution profile.  No other iOS entitlements are required by this
+		app (no App Groups, no push, no Keychain sharing, no JIT).
+	-->
+	<key>get-task-allow</key>
+	<false/>
+</dict>
+</plist>
