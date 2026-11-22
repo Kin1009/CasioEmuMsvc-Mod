@@ -1,0 +1,58 @@
+{
+  "format": "CasioEmuMsvc.ModelInfo",
+  "version": 1,
+  "model_name": "fx-CG50",
+  "hardware_id": 14,
+  "csr_mask": 0,
+  "real_hardware": false,
+  "pd_value": 0,
+  "interface_path": "face.png",
+  "board_path": "board.svg",
+  "rom_path": "rom.bin",
+  "flash_path": "",
+  "ink_color": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "enable_new_screen": true,
+  "is_sample_rom": false,
+  "legacy_ko": false,
+  "u16_mode": true,
+  "large_model": true,
+  "ml620_mirroring": false,
+  "screen_width": 396,
+  "screen_height": 224,
+  "screen_scale_y": 1.0,
+  "sprites": {
+    "rsd_interface": {
+      "src": {
+        "x": 0,
+        "y": 0,
+        "w": 474,
+        "h": 1000
+      },
+      "dest": {
+        "x": 0,
+        "y": 0,
+        "w": 474,
+        "h": 1000
+      }
+    },
+    "rsd_ann": {
+      "index": 0
+    }
+  },
+  "buttons": [],
+  "status": [],
+  "extra": {
+    "arch_provider": "cg50sh4",
+    "arch_architecture": "sh4",
+    "arch_fb_width": "396",
+    "arch_fb_height": "224",
+    "arch_cycles_per_second": "118000000",
+    "arch_cabi_prefix": "cg50_",
+    "arch_power_key_row": "0",
+    "arch_power_key_col": "0"
+  }
+}

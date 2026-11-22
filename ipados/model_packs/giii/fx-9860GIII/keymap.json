@@ -91,7 +91,7 @@
       "data_ki": 2,
       "data_ko": 256,
       "label": "SHIFT",
-      "sdl": "LSHIFT"
+      "sdl": "Left Shift"
     },
     {
       "name": "OPTN",
@@ -102,7 +102,7 @@
       "data_ki": 4,
       "data_ko": 256,
       "label": "OPTN",
-      "sdl": "LALT"
+      "sdl": "Left Alt"
     },
     {
       "name": "VARS",
@@ -113,7 +113,7 @@
       "data_ki": 8,
       "data_ko": 256,
       "label": "VARS",
-      "sdl": "LCONTROL"
+      "sdl": "Left Ctrl"
     },
     {
       "name": "MENU",
@@ -135,7 +135,7 @@
       "data_ki": 32,
       "data_ko": 256,
       "label": "←",
-      "sdl": "LEFT"
+      "sdl": "Left"
     },
     {
       "name": "UP",
@@ -146,7 +146,7 @@
       "data_ki": 64,
       "data_ko": 256,
       "label": "↑",
-      "sdl": "UP"
+      "sdl": "Up"
     },
     {
       "name": "ALPHA",
@@ -190,7 +190,7 @@
       "data_ki": 16,
       "data_ko": 128,
       "label": "EXIT",
-      "sdl": "ESCAPE"
+      "sdl": "Escape"
     },
     {
       "name": "DOWN",
@@ -201,7 +201,7 @@
       "data_ki": 32,
       "data_ko": 128,
       "label": "↓",
-      "sdl": "DOWN"
+      "sdl": "Down"
     },
     {
       "name": "RIGHT",
@@ -212,7 +212,7 @@
       "data_ki": 64,
       "data_ko": 128,
       "label": "→",
-      "sdl": "RIGHT"
+      "sdl": "Right"
     },
     {
       "name": "XOT",
@@ -311,7 +311,7 @@
       "data_ki": 8,
       "data_ko": 32,
       "label": "(",
-      "sdl": "LEFTBRACKET"
+      "sdl": "["
     },
     {
       "name": "RIGHTP",
@@ -322,7 +322,7 @@
       "data_ki": 16,
       "data_ko": 32,
       "label": ")",
-      "sdl": "RIGHTBRACKET"
+      "sdl": "]"
     },
     {
       "name": "COMMA",
@@ -333,7 +333,7 @@
       "data_ki": 32,
       "data_ko": 32,
       "label": ",",
-      "sdl": "COMMA"
+      "sdl": ","
     },
     {
       "name": "ARROW",
@@ -344,7 +344,7 @@
       "data_ki": 64,
       "data_ko": 32,
       "label": "→ (STORE)",
-      "sdl": "TAB"
+      "sdl": "Tab"
     },
     {
       "name": "7",
@@ -388,7 +388,7 @@
       "data_ki": 16,
       "data_ko": 16,
       "label": "DEL",
-      "sdl": "BACKSPACE"
+      "sdl": "Backspace"
     },
     {
       "name": "4",
@@ -432,7 +432,7 @@
       "data_ki": 16,
       "data_ko": 8,
       "label": "×",
-      "sdl": "MULTIPLY"
+      "sdl": "*"
     },
     {
       "name": "DIV",
@@ -443,7 +443,7 @@
       "data_ki": 32,
       "data_ko": 8,
       "label": "÷",
-      "sdl": "SLASH"
+      "sdl": "/"
     },
     {
       "name": "1",
@@ -487,7 +487,7 @@
       "data_ki": 16,
       "data_ko": 4,
       "label": "+",
-      "sdl": "PLUS"
+      "sdl": "+"
     },
     {
       "name": "SUB",
@@ -498,7 +498,7 @@
       "data_ki": 32,
       "data_ko": 4,
       "label": "−",
-      "sdl": "MINUS"
+      "sdl": "-"
     },
     {
       "name": "0",
@@ -520,7 +520,7 @@
       "data_ki": 4,
       "data_ko": 2,
       "label": ".",
-      "sdl": "PERIOD"
+      "sdl": "."
     },
     {
       "name": "EXP",
@@ -542,7 +542,7 @@
       "data_ki": 16,
       "data_ko": 2,
       "label": "−",
-      "sdl": "KP_MINUS"
+      "sdl": "Keypad -"
     },
     {
       "name": "EXE",

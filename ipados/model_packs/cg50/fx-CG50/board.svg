@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 474 1000" width="474" height="1000">
+  <title>fx-CG50 real-position board (BTN_CG50)</title>
+  <!-- Button hit regions traced from genuine blacked-out product art by BTN_CG50. Matrix codes from the shipped keymap. -->
+  <rect id="screenSlot" x="47" y="130" width="379" height="214" fill="#000000" stroke="#808080" stroke-width="2"/>
+  <g class="board-status" x="55" y="126" width="363" height="18">
+    <rect x="55" y="126" width="363" height="18" fill="#000000"/>
+  </g>
+  <g class="key" data-ki="0" data-ko="0" data-key="AC/ON"><rect x="361" y="692" width="68" height="47" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="2" data-key="-&gt;"><rect x="374" y="630" width="55" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="2" data-key="tan"><rect x="374" y="577" width="58" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="2" data-key="RIGHT"><rect x="392" y="480" width="40" height="38" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="2" data-key="UP"><rect x="354" y="446" width="40" height="35" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="2" data-key="F6"><rect x="384" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="2" data-ko="4" data-key="EXE"><rect x="361" y="890" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="4" data-ko="4" data-key="-"><rect x="361" y="824" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="8" data-ko="4" data-key="/"><rect x="361" y="758" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="4" data-key=","><rect x="308" y="630" width="67" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="4" data-key="cos"><rect x="308" y="577" width="67" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="4" data-key="DOWN"><rect x="354" y="516" width="40" height="34" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="4" data-key="LEFT"><rect x="317" y="480" width="39" height="38" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="4" data-key="F5"><rect x="317" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="2" data-ko="8" data-key="(-)"><rect x="282" y="890" width="67" height="47" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="4" data-ko="8" data-key="+"><rect x="282" y="824" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="8" data-ko="8" data-key="*"><rect x="282" y="758" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="16" data-ko="8" data-key="DEL"><rect x="282" y="692" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="8" data-key=")"><rect x="242" y="630" width="67" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="8" data-key="sin"><rect x="242" y="577" width="67" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="8" data-key="EXIT"><rect x="250" y="512" width="46" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="8" data-key="MENU"><rect x="250" y="458" width="46" height="31" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="8" data-key="F4"><rect x="250" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="2" data-ko="16" data-key="x10^x"><rect x="202" y="890" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="4" data-ko="16" data-key="3"><rect x="202" y="824" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="8" data-ko="16" data-key="6"><rect x="203" y="758" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="16" data-ko="16" data-key="9"><rect x="203" y="692" width="67" height="47" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="16" data-key="("><rect x="177" y="630" width="66" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="16" data-key="ln"><rect x="177" y="577" width="66" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="16" data-key="^"><rect x="183" y="512" width="64" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="16" data-key="VARS"><rect x="183" y="458" width="64" height="31" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="16" data-key="F3"><rect x="183" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="2" data-ko="32" data-key="."><rect x="123" y="890" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="4" data-ko="32" data-key="2"><rect x="123" y="824" width="68" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="8" data-ko="32" data-key="5"><rect x="123" y="757" width="68" height="47" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="16" data-ko="32" data-key="8"><rect x="123" y="691" width="68" height="47" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="32" data-key="S&lt;-&gt;D"><rect x="111" y="630" width="67" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="32" data-key="log"><rect x="111" y="577" width="67" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="32" data-key="x^2"><rect x="115" y="512" width="64" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="32" data-key="OPTN"><rect x="115" y="458" width="64" height="31" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="32" data-key="F2"><rect x="116" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="2" data-ko="64" data-key="0"><rect x="44" y="890" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="4" data-ko="64" data-key="1"><rect x="44" y="824" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="8" data-ko="64" data-key="4"><rect x="44" y="758" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="16" data-ko="64" data-key="7"><rect x="44" y="692" width="67" height="46" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="32" data-ko="64" data-key="a b/c"><rect x="46" y="630" width="66" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="64" data-ko="64" data-key="X,th,T"><rect x="46" y="577" width="66" height="27" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="128" data-ko="64" data-key="ALPHA"><rect x="45" y="512" width="66" height="29" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="256" data-ko="64" data-key="SHIFT"><rect x="45" y="458" width="66" height="31" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+  <g class="key" data-ki="512" data-ko="64" data-key="F1"><rect x="50" y="389" width="41" height="39" rx="6" fill="#ffffff" fill-opacity="0.3" stroke="none"/></g>
+</svg>

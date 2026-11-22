@@ -1,0 +1,490 @@
+{
+  "schema": "casioemu.cg50.keymap/1",
+  "model": "fx-CG50",
+  "source": {
+    "positions": "SH3RESEARCH.md §4 -> hexbinoct/casio-cg50 re/KEYMAP.md (auto-generated from OS 3.60; empirically checked on emulated hardware)",
+    "matrix_description": "hexbinoct Keyboard (KEYSC) page: 8 rows (0-7) x 12 columns (0-11); rows 7 and columns 10-11 have no physical keypad keys",
+    "url": "https://github.com/hexbinoct/casio-cg50/blob/main/re/KEYMAP.md"
+  },
+  "matrix": {
+    "rows": 8,
+    "columns": 12,
+    "used_rows": "0-6",
+    "used_columns": "0-9",
+    "key_count": 50
+  },
+  "encoding": {
+    "board_svg_data_ki": "1 << column",
+    "board_svg_data_ko": "1 << row",
+    "kiko": "(ko_index << 4) | ki_index",
+    "host_key_down": "row = kiko >> 4, col = kiko & 0x0F",
+    "power_key": "data_ki=0 and data_ko=0 is the host's BUTTON_KIKO_POWER (0xFF) sentinel; the host then uses arch_power_key_row/col (0,0)"
+  },
+  "power_key": {
+    "name": "AC/ON",
+    "row": 0,
+    "col": 0,
+    "kiko": "0xFF (sentinel)"
+  },
+  "keys": [
+    {
+      "name": "AC/ON",
+      "row": 0,
+      "col": 0,
+      "data_ki_mask": "0x0 (power sentinel)",
+      "data_ko_mask": "0x0 (power sentinel)",
+      "kiko": "0xFF (power sentinel -> descriptor row/col)",
+      "primary_getkey_code": "0x753F"
+    },
+    {
+      "name": "0",
+      "row": 6,
+      "col": 1,
+      "data_ki_mask": "0x2",
+      "data_ko_mask": "0x40",
+      "kiko": "0x61",
+      "primary_getkey_code": "0x0030"
+    },
+    {
+      "name": ".",
+      "row": 5,
+      "col": 1,
+      "data_ki_mask": "0x2",
+      "data_ko_mask": "0x20",
+      "kiko": "0x51",
+      "primary_getkey_code": "0x002E"
+    },
+    {
+      "name": "x10^x",
+      "row": 4,
+      "col": 1,
+      "data_ki_mask": "0x2",
+      "data_ko_mask": "0x10",
+      "kiko": "0x41",
+      "primary_getkey_code": "0x000F"
+    },
+    {
+      "name": "(-)",
+      "row": 3,
+      "col": 1,
+      "data_ki_mask": "0x2",
+      "data_ko_mask": "0x8",
+      "kiko": "0x31",
+      "primary_getkey_code": "0x0087"
+    },
+    {
+      "name": "EXE",
+      "row": 2,
+      "col": 1,
+      "data_ki_mask": "0x2",
+      "data_ko_mask": "0x4",
+      "kiko": "0x21",
+      "primary_getkey_code": "0x7534"
+    },
+    {
+      "name": "1",
+      "row": 6,
+      "col": 2,
+      "data_ki_mask": "0x4",
+      "data_ko_mask": "0x40",
+      "kiko": "0x62",
+      "primary_getkey_code": "0x0031"
+    },
+    {
+      "name": "2",
+      "row": 5,
+      "col": 2,
+      "data_ki_mask": "0x4",
+      "data_ko_mask": "0x20",
+      "kiko": "0x52",
+      "primary_getkey_code": "0x0032"
+    },
+    {
+      "name": "3",
+      "row": 4,
+      "col": 2,
+      "data_ki_mask": "0x4",
+      "data_ko_mask": "0x10",
+      "kiko": "0x42",
+      "primary_getkey_code": "0x0033"
+    },
+    {
+      "name": "+",
+      "row": 3,
+      "col": 2,
+      "data_ki_mask": "0x4",
+      "data_ko_mask": "0x8",
+      "kiko": "0x32",
+      "primary_getkey_code": "0x0089"
+    },
+    {
+      "name": "-",
+      "row": 2,
+      "col": 2,
+      "data_ki_mask": "0x4",
+      "data_ko_mask": "0x4",
+      "kiko": "0x22",
+      "primary_getkey_code": "0x0099"
+    },
+    {
+      "name": "4",
+      "row": 6,
+      "col": 3,
+      "data_ki_mask": "0x8",
+      "data_ko_mask": "0x40",
+      "kiko": "0x63",
+      "primary_getkey_code": "0x0034"
+    },
+    {
+      "name": "5",
+      "row": 5,
+      "col": 3,
+      "data_ki_mask": "0x8",
+      "data_ko_mask": "0x20",
+      "kiko": "0x53",
+      "primary_getkey_code": "0x0035"
+    },
+    {
+      "name": "6",
+      "row": 4,
+      "col": 3,
+      "data_ki_mask": "0x8",
+      "data_ko_mask": "0x10",
+      "kiko": "0x43",
+      "primary_getkey_code": "0x0036"
+    },
+    {
+      "name": "*",
+      "row": 3,
+      "col": 3,
+      "data_ki_mask": "0x8",
+      "data_ko_mask": "0x8",
+      "kiko": "0x33",
+      "primary_getkey_code": "0x00A9"
+    },
+    {
+      "name": "/",
+      "row": 2,
+      "col": 3,
+      "data_ki_mask": "0x8",
+      "data_ko_mask": "0x4",
+      "kiko": "0x23",
+      "primary_getkey_code": "0x00B9"
+    },
+    {
+      "name": "7",
+      "row": 6,
+      "col": 4,
+      "data_ki_mask": "0x10",
+      "data_ko_mask": "0x40",
+      "kiko": "0x64",
+      "primary_getkey_code": "0x0037"
+    },
+    {
+      "name": "8",
+      "row": 5,
+      "col": 4,
+      "data_ki_mask": "0x10",
+      "data_ko_mask": "0x20",
+      "kiko": "0x54",
+      "primary_getkey_code": "0x0038"
+    },
+    {
+      "name": "9",
+      "row": 4,
+      "col": 4,
+      "data_ki_mask": "0x10",
+      "data_ko_mask": "0x10",
+      "kiko": "0x44",
+      "primary_getkey_code": "0x0039"
+    },
+    {
+      "name": "DEL",
+      "row": 3,
+      "col": 4,
+      "data_ki_mask": "0x10",
+      "data_ko_mask": "0x8",
+      "kiko": "0x34",
+      "primary_getkey_code": "0x7549"
+    },
+    {
+      "name": "a b/c",
+      "row": 6,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x40",
+      "kiko": "0x65",
+      "primary_getkey_code": "0x00BB"
+    },
+    {
+      "name": "S<->D",
+      "row": 5,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x20",
+      "kiko": "0x55",
+      "primary_getkey_code": "0x755E"
+    },
+    {
+      "name": "(",
+      "row": 4,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x10",
+      "kiko": "0x45",
+      "primary_getkey_code": "0x0028"
+    },
+    {
+      "name": ")",
+      "row": 3,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x8",
+      "kiko": "0x35",
+      "primary_getkey_code": "0x0029"
+    },
+    {
+      "name": ",",
+      "row": 2,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x4",
+      "kiko": "0x25",
+      "primary_getkey_code": "0x002C"
+    },
+    {
+      "name": "->",
+      "row": 1,
+      "col": 5,
+      "data_ki_mask": "0x20",
+      "data_ko_mask": "0x2",
+      "kiko": "0x15",
+      "primary_getkey_code": "0x000E"
+    },
+    {
+      "name": "X,th,T",
+      "row": 6,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x40",
+      "kiko": "0x66",
+      "primary_getkey_code": "0x7531"
+    },
+    {
+      "name": "log",
+      "row": 5,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x20",
+      "kiko": "0x56",
+      "primary_getkey_code": "0x0095"
+    },
+    {
+      "name": "ln",
+      "row": 4,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x10",
+      "kiko": "0x46",
+      "primary_getkey_code": "0x0085"
+    },
+    {
+      "name": "sin",
+      "row": 3,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x8",
+      "kiko": "0x36",
+      "primary_getkey_code": "0x0081"
+    },
+    {
+      "name": "cos",
+      "row": 2,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x4",
+      "kiko": "0x26",
+      "primary_getkey_code": "0x0082"
+    },
+    {
+      "name": "tan",
+      "row": 1,
+      "col": 6,
+      "data_ki_mask": "0x40",
+      "data_ko_mask": "0x2",
+      "kiko": "0x16",
+      "primary_getkey_code": "0x0083"
+    },
+    {
+      "name": "ALPHA",
+      "row": 6,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x40",
+      "kiko": "0x67",
+      "primary_getkey_code": "0x7537"
+    },
+    {
+      "name": "x^2",
+      "row": 5,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x20",
+      "kiko": "0x57",
+      "primary_getkey_code": "0x008B"
+    },
+    {
+      "name": "^",
+      "row": 4,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x10",
+      "kiko": "0x47",
+      "primary_getkey_code": "0x00A8"
+    },
+    {
+      "name": "EXIT",
+      "row": 3,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x8",
+      "kiko": "0x37",
+      "primary_getkey_code": "0x7532"
+    },
+    {
+      "name": "DOWN",
+      "row": 2,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x4",
+      "kiko": "0x27",
+      "primary_getkey_code": "0x7547"
+    },
+    {
+      "name": "RIGHT",
+      "row": 1,
+      "col": 7,
+      "data_ki_mask": "0x80",
+      "data_ko_mask": "0x2",
+      "kiko": "0x17",
+      "primary_getkey_code": "0x7545"
+    },
+    {
+      "name": "SHIFT",
+      "row": 6,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x40",
+      "kiko": "0x68",
+      "primary_getkey_code": "0x7536"
+    },
+    {
+      "name": "OPTN",
+      "row": 5,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x20",
+      "kiko": "0x58",
+      "primary_getkey_code": "0x7538"
+    },
+    {
+      "name": "VARS",
+      "row": 4,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x10",
+      "kiko": "0x48",
+      "primary_getkey_code": "0x7540"
+    },
+    {
+      "name": "MENU",
+      "row": 3,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x8",
+      "kiko": "0x38",
+      "primary_getkey_code": "0x7533"
+    },
+    {
+      "name": "LEFT",
+      "row": 2,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x4",
+      "kiko": "0x28",
+      "primary_getkey_code": "0x7544"
+    },
+    {
+      "name": "UP",
+      "row": 1,
+      "col": 8,
+      "data_ki_mask": "0x100",
+      "data_ko_mask": "0x2",
+      "kiko": "0x18",
+      "primary_getkey_code": "0x7542"
+    },
+    {
+      "name": "F1",
+      "row": 6,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x40",
+      "kiko": "0x69",
+      "primary_getkey_code": "0x7539"
+    },
+    {
+      "name": "F2",
+      "row": 5,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x20",
+      "kiko": "0x59",
+      "primary_getkey_code": "0x753A"
+    },
+    {
+      "name": "F3",
+      "row": 4,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x10",
+      "kiko": "0x49",
+      "primary_getkey_code": "0x753B"
+    },
+    {
+      "name": "F4",
+      "row": 3,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x8",
+      "kiko": "0x39",
+      "primary_getkey_code": "0x753C"
+    },
+    {
+      "name": "F5",
+      "row": 2,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x4",
+      "kiko": "0x29",
+      "primary_getkey_code": "0x753D"
+    },
+    {
+      "name": "F6",
+      "row": 1,
+      "col": 9,
+      "data_ki_mask": "0x200",
+      "data_ko_mask": "0x2",
+      "kiko": "0x19",
+      "primary_getkey_code": "0x753E"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "DIAGNOSTIC",
+      "row": 3,
+      "col": 11,
+      "primary_getkey_code": "0x7D00",
+      "reason": "OS diagnostic position, no physical key; not present on the virtual keypad"
+    }
+  ]
+}
