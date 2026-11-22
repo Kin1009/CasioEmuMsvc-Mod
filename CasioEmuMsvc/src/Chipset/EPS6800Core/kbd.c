@@ -10,6 +10,8 @@
 void kbd_connect_bus_state(struct kbd_state *state, struct cpu_state *cpu, struct mmio_state *mmio) {
 	state->cpu = cpu;
 	state->mmio = mmio;
+	state->traits = eps_get_variant_traits(mmio->variant);
+	state->profile = &state->traits->kbd;
 }
 
 enum {
@@ -30,8 +32,43 @@ enum kbd_matrix_model {
 	KBD_MATRIX_MODEL_EPS6009
 };
 
-static const struct eps_kbd_profile *kbd_profile(enum eps_variant variant) {
-	return &eps_get_variant_traits(variant)->kbd;
+/* CG100_PERF OPT-1: key-input-enable test using the cached traits pointer. */
+static inline int kbd_key_input_enabled_cached(const struct kbd_state *state) {
+	const struct eps_variant_traits *t = state->traits;
+	if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009)
+		return ((state->reg[t->reg_stbcon] & BIT_AUTO_KEY_SCAN) != 0) ||
+			((state->reg[t->reg_pacon] & 0x01u) != 0);
+	return (state->reg[t->reg_stbcon] & BIT_KEY_INPUT_ENABLE) != 0;
+}
+
+/* CG100_PERF OPT-1: refresh one key's bit in the activity bitmap. */
+static inline void kbd_refresh_key_activity(struct kbd_state *state, uint8_t key) {
+	const uint32_t bit = 1u << (key & 31u);
+	const uint32_t idx = (uint32_t)key >> 5;
+	if (state->key_pending_down[key] || state->key_pending_up[key] ||
+		state->key_press_cycles[key] || state->key_release_cycles[key])
+		state->event_mask[idx] |= bit;
+	else
+		state->event_mask[idx] &= ~bit;
+}
+
+/* CG100_PERF OPT-1: safe early-out.  The level-sensitive path can assert an
+ * interrupt with no key held only when the EPS6009 PA configuration drives the
+ * key bits low (pacon[2:1] == 0); keep the full tick in that rare case. */
+static inline bool kbd_can_skip_tick(const struct kbd_state *state) {
+	const struct eps_variant_traits *t = state->traits;
+	if (state->on_pending_down || state->on_pending_up || state->pending_press_mask)
+		return false;
+	if ((state->event_mask[0] | state->event_mask[1] |
+		 state->event_mask[2] | state->event_mask[3]) != 0)
+		return false;
+	if (state->on_pressed || state->key_matrix_active)
+		return false;
+	if ((state->reg[t->reg_paintsta] & state->reg[t->reg_painten]) != 0)
+		return false;
+	if (state->profile->level_sensitive_inputs && !(state->reg[t->reg_pacon] & 0x06u))
+		return false;
+	return true;
 }
 
 static uint8_t kbd_bus_read_internal(struct kbd_state *state, uint8_t addr) {
@@ -47,7 +84,7 @@ static bool kbd_cpu_is_sleep_repeating(const struct kbd_state *state) {
 }
 
 static bool kbd_cpu_accepts_pending_press(const struct kbd_state *state) {
-	if (kbd_profile(state->mmio->variant)->accept_explicit_sleep_mode) {
+	if (state->profile->accept_explicit_sleep_mode) {
 		/* ePS9500 SLEP advances PC before entering Sleep/Idle, unlike the
 		 * legacy ePS6800 repeat-at-SLEP implementation.  It must therefore
 		 * accept a matrix edge from the explicit CPU mode as ePS6009 does. */
@@ -71,7 +108,7 @@ static uint8_t kbd_scan_row_mask(uint8_t row) {
 }
 
 static uint8_t kbd_key_input_mask(const struct kbd_state *state) {
-	return kbd_profile(state->mmio->variant)->key_input_mask;
+	return state->profile->key_input_mask;
 }
 
 /*
@@ -87,7 +124,7 @@ static uint8_t kbd_key_input_mask(const struct kbd_state *state) {
  */
 static uint8_t kbd_get_eps6009_porta_base(const struct kbd_state *state) {
 	uint8_t pa = 0;
-	const uint8_t pacon = state->reg[eps_reg_pacon(state->mmio->variant)] & 0x0fu;
+	const uint8_t pacon = state->reg[state->traits->reg_pacon] & 0x0fu;
 
 	if (pacon & 0x08u)
 		pa |= KBD_ON_COLUMN_MASK;
@@ -97,10 +134,10 @@ static uint8_t kbd_get_eps6009_porta_base(const struct kbd_state *state) {
 }
 
 static uint8_t kbd_get_matrix(const struct kbd_state *state) {
-	if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
+	if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
 		uint8_t pa = kbd_get_eps6009_porta_base(state);
-		const uint8_t strobe = state->reg[eps_reg_stbcon(state->mmio->variant)];
-		if (eps_key_input_enabled(state->mmio->variant, state->reg)) {
+		const uint8_t strobe = state->reg[state->traits->reg_stbcon];
+		if (kbd_key_input_enabled_cached(state)) {
 			if ((strobe & BIT_AUTO_KEY_SCAN) || (strobe & BIT_ALL_STROBES)) {
 				for (uint8_t row = 0; row < KBD_ROW_COUNT; ++row)
 					pa &= (uint8_t)(state->matrix[row] | (uint8_t)~KBD_EPS6009_PORTA_KEY_MASK);
@@ -145,7 +182,7 @@ static uint8_t kbd_get_matrix(const struct kbd_state *state) {
 }
 
 static uint8_t kbd_get_pa(const struct kbd_state *state) {
-	if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009)
+	if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009)
 		return kbd_get_matrix(state);
 	uint8_t input = kbd_get_matrix(state);
 	uint8_t pa = (input & state->reg[REG_DCRA]) |
@@ -164,7 +201,7 @@ static uint8_t kbd_get_pa(const struct kbd_state *state) {
 
 static void kbd_update_porta(struct kbd_state *state) {
 	uint8_t pa = kbd_get_pa(state);
-	const uint8_t reg_porta = eps_reg_porta(state->mmio->variant);
+	const uint8_t reg_porta = state->traits->reg_porta;
 
 	state->reg[reg_porta] = pa;
 	kbd_bus_write_internal(state, reg_porta, pa);
@@ -172,8 +209,8 @@ static void kbd_update_porta(struct kbd_state *state) {
 
 static void kbd_update_eps6009_portb(struct kbd_state *state) {
 	const enum eps_variant variant = state->mmio->variant;
-	const uint8_t dcrb = state->reg[eps_reg_dcrb(variant)] & KBD_EPS6009_PORTB_MASK;
-	const uint8_t pbcon = state->reg[eps_reg_pbcon(variant)] & KBD_EPS6009_PORTB_MASK;
+	const uint8_t dcrb = state->reg[state->traits->reg_dcrb] & KBD_EPS6009_PORTB_MASK;
+	const uint8_t pbcon = state->reg[state->traits->reg_pbcon] & KBD_EPS6009_PORTB_MASK;
 	const uint8_t latch = state->portb_latch & KBD_EPS6009_PORTB_MASK;
 	/* F-715SG-family firmware samples PB1:PB0 as model-selection straps at
 	 * boot, then changes the same pins back to keyboard row outputs. */
@@ -182,8 +219,8 @@ static void kbd_update_eps6009_portb(struct kbd_state *state) {
 		(pbcon & (uint8_t)~state->portb_input_mask));
 	const uint8_t pb = (uint8_t)((latch & (uint8_t)~dcrb) | (external & dcrb));
 
-	state->reg[eps_reg_portb(variant)] = pb;
-	kbd_bus_write_internal(state, eps_reg_portb(variant), pb);
+	state->reg[state->traits->reg_portb] = pb;
+	kbd_bus_write_internal(state, state->traits->reg_portb, pb);
 }
 
 static uint8_t kbd_active_column_mask(const struct kbd_state *state) {
@@ -200,15 +237,15 @@ static uint8_t kbd_active_column_mask(const struct kbd_state *state) {
 
 static void kbd_trigger_press(struct kbd_state *state, uint8_t mask) {
 	const enum eps_variant variant = state->mmio->variant;
-	uint8_t interrupt_mask = mask & state->reg[eps_reg_painten(variant)];
-	uint8_t wake_mask = mask & state->reg[eps_reg_pawake(variant)];
-	uint8_t key_wake_mask = eps_key_input_enabled(variant, state->reg)
+	uint8_t interrupt_mask = mask & state->reg[state->traits->reg_painten];
+	uint8_t wake_mask = mask & state->reg[state->traits->reg_pawake];
+	uint8_t key_wake_mask = kbd_key_input_enabled_cached(state)
 		? (mask & kbd_key_input_mask(state))
 		: 0;
 	if (interrupt_mask) {
-		state->reg[eps_reg_paintsta(variant)] |= interrupt_mask;
-		kbd_bus_write_internal(state, eps_reg_paintsta(variant), state->reg[eps_reg_paintsta(variant)]);
-		if (kbd_bus_read_internal(state, eps_reg_cpucon(variant)) & BIT_GLINT) {
+		state->reg[state->traits->reg_paintsta] |= interrupt_mask;
+		kbd_bus_write_internal(state, state->traits->reg_paintsta, state->reg[state->traits->reg_paintsta]);
+		if (kbd_bus_read_internal(state, state->traits->reg_cpucon) & BIT_GLINT) {
 			kbd_cpu_interrupt(state, INT_LEVEL1_PAINT);
 			return;
 		}
@@ -228,8 +265,8 @@ static void kbd_sync_latched_interrupt(struct kbd_state *state) {
 	 * event even after key release; deliver it when firmware unmasks the
 	 * interrupt, unless it has cleared the status or disabled PAINTEN.
 	 * Do not reassert inside the ISR, where GLINT is masked again. */
-	if ((state->reg[eps_reg_paintsta(variant)] & state->reg[eps_reg_painten(variant)]) &&
-		(kbd_bus_read_internal(state, eps_reg_cpucon(variant)) & BIT_GLINT)) {
+	if ((state->reg[state->traits->reg_paintsta] & state->reg[state->traits->reg_painten]) &&
+		(kbd_bus_read_internal(state, state->traits->reg_cpucon) & BIT_GLINT)) {
 		kbd_cpu_interrupt(state, INT_LEVEL1_PAINT);
 	}
 }
@@ -261,7 +298,7 @@ static bool kbd_countdown_elapsed(uint16_t *counter, uint32_t cycles) {
 }
 
 static uint16_t kbd_press_delay_cycles(const struct kbd_state *state) {
-	return kbd_profile(state->mmio->variant)->press_delay_cycles;
+	return state->profile->press_delay_cycles;
 }
 
 static void kbd_process_pending_press(struct kbd_state *state) {
@@ -270,8 +307,8 @@ static void kbd_process_pending_press(struct kbd_state *state) {
 	const enum eps_variant variant = state->mmio->variant;
 
 	state->pending_press_mask &= active_mask;
-	ready_mask = state->pending_press_mask & (state->reg[eps_reg_painten(variant)] | state->reg[eps_reg_pawake(variant)] |
-		(eps_key_input_enabled(variant, state->reg) ? kbd_key_input_mask(state) : 0));
+	ready_mask = state->pending_press_mask & (state->reg[state->traits->reg_painten] | state->reg[state->traits->reg_pawake] |
+		(kbd_key_input_enabled_cached(state) ? kbd_key_input_mask(state) : 0));
 	if (!ready_mask || !kbd_cpu_accepts_pending_press(state)) {
 		return;
 	}
@@ -299,21 +336,21 @@ static void kbd_process_pending_press(struct kbd_state *state) {
 static void kbd_sync_level_sensitive_inputs(struct kbd_state *state) {
 	uint8_t asserted;
 
-	if (!kbd_profile(state->mmio->variant)->level_sensitive_inputs)
+	if (!state->profile->level_sensitive_inputs)
 		return;
 
 	const uint8_t pa = kbd_get_pa(state);
-	asserted = (uint8_t)(state->reg[eps_reg_painten(state->mmio->variant)] &
+	asserted = (uint8_t)(state->reg[state->traits->reg_painten] &
 		(uint8_t)~pa & KBD_EPS6009_PORTA_MASK);
 	if (asserted) {
-		state->reg[eps_reg_paintsta(state->mmio->variant)] |= asserted;
-		kbd_bus_write_internal(state, eps_reg_paintsta(state->mmio->variant),
-			state->reg[eps_reg_paintsta(state->mmio->variant)]);
+		state->reg[state->traits->reg_paintsta] |= asserted;
+		kbd_bus_write_internal(state, state->traits->reg_paintsta,
+			state->reg[state->traits->reg_paintsta]);
 		kbd_cpu_interrupt(state, INT_LEVEL1_PAINT);
 	}
 
 	if (kbd_cpu_accepts_pending_press(state)) {
-		asserted = (uint8_t)(state->reg[eps_reg_pawake(state->mmio->variant)] &
+		asserted = (uint8_t)(state->reg[state->traits->reg_pawake] &
 			(uint8_t)~pa & KBD_EPS6009_PORTA_MASK);
 		if (asserted) {
 			kbd_cpu_wake(state, WAKE_PAINT);
@@ -324,17 +361,18 @@ static void kbd_sync_level_sensitive_inputs(struct kbd_state *state) {
 static void kbd_schedule_release_hold(struct kbd_state *state, uint8_t key) {
 	state->key_pending_up[key] = false;
 	state->key_release_cycles[key] = KEY_RELEASE_HOLD_CYCLES;
+	kbd_refresh_key_activity(state, key);
 }
 
 uint8_t kbd_read_byte_state(struct kbd_state *state, uint8_t addr) {
 	uint8_t byte;
 	if (addr < KBD_REG_COUNT) {
-		if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
-			if (addr == eps_reg_porta(state->mmio->variant)) {
+		if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
+			if (addr == state->traits->reg_porta) {
 				kbd_update_porta(state);
 				return state->reg[addr];
 			}
-			if (addr == eps_reg_portb(state->mmio->variant)) {
+			if (addr == state->traits->reg_portb) {
 				kbd_update_eps6009_portb(state);
 				return state->reg[addr];
 			}
@@ -369,36 +407,36 @@ uint8_t kbd_read_byte_state(struct kbd_state *state, uint8_t addr) {
 void kbd_write_byte_state(struct kbd_state *state, uint8_t addr, uint8_t byte) {
 	if (addr < KBD_REG_COUNT) {
 		state->reg[addr] = byte;
-		if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
-			if (addr == eps_reg_porta(state->mmio->variant)) {
+		if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
+			if (addr == state->traits->reg_porta) {
 				state->porta_latch = byte & KBD_EPS6009_PORTA_MASK;
 				kbd_update_porta(state);
 			}
-			else if (addr == eps_reg_portb(state->mmio->variant)) {
+			else if (addr == state->traits->reg_portb) {
 				state->portb_latch = byte & KBD_EPS6009_PORTB_MASK;
 				kbd_update_eps6009_portb(state);
 			}
-			else if (addr == eps_reg_stbcon(state->mmio->variant) ||
-				addr == eps_reg_painten(state->mmio->variant) ||
-				addr == eps_reg_pawake(state->mmio->variant) ||
-				addr == eps_reg_pacon(state->mmio->variant) ||
-				addr == eps_reg_dcrb(state->mmio->variant)) {
-				if (addr == eps_reg_pacon(state->mmio->variant)) {
+			else if (addr == state->traits->reg_stbcon ||
+				addr == state->traits->reg_painten ||
+				addr == state->traits->reg_pawake ||
+				addr == state->traits->reg_pacon ||
+				addr == state->traits->reg_dcrb) {
+				if (addr == state->traits->reg_pacon) {
 					state->reg[addr] = byte & 0x0fu;
 					kbd_update_porta(state);
 				}
-				else if (addr == eps_reg_dcrb(state->mmio->variant)) {
+				else if (addr == state->traits->reg_dcrb) {
 					state->reg[addr] = byte & KBD_EPS6009_PORTB_MASK;
 					kbd_update_eps6009_portb(state);
 				}
 				kbd_process_pending_press(state);
 			}
-			else if (addr == eps_reg_pbcon(state->mmio->variant)) {
+			else if (addr == state->traits->reg_pbcon) {
 				state->reg[addr] = byte & KBD_EPS6009_PORTB_MASK;
 				kbd_update_eps6009_portb(state);
 			}
-			else if (addr == eps_reg_paintsta(state->mmio->variant)) {
-				kbd_bus_write_internal(state, eps_reg_paintsta(state->mmio->variant), state->reg[addr]);
+			else if (addr == state->traits->reg_paintsta) {
+				kbd_bus_write_internal(state, state->traits->reg_paintsta, state->reg[addr]);
 			}
 			return;
 		}
@@ -438,6 +476,7 @@ void kbd_keydown_state(struct kbd_state *state, uint8_t key) {
 	state->key_pending_down[key] = true;
 	state->key_pending_up[key] = false;
 	state->key_press_cycles[key] = kbd_press_delay_cycles(state);
+	kbd_refresh_key_activity(state, key);
 }
 
 static void kbd_activate_key(struct kbd_state *state, uint8_t key) {
@@ -449,8 +488,10 @@ static void kbd_activate_key(struct kbd_state *state, uint8_t key) {
 	uint8_t mask = kbd_key_mask(key);
 	if (state->matrix[row] & mask) {
 		state->matrix[row] &= ~mask;
+		state->key_matrix_active = true;
 		kbd_queue_press(state, mask);
 	}
+	kbd_refresh_key_activity(state, key);
 }
 
 static void kbd_release_key(struct kbd_state *state, uint8_t key) {
@@ -460,6 +501,14 @@ static void kbd_release_key(struct kbd_state *state, uint8_t key) {
 
 	uint8_t row = kbd_key_row(key);
 	state->matrix[row] |= kbd_key_mask(key);
+	state->key_matrix_active = false;
+	for (int r = 0; r < KBD_ROW_COUNT; ++r) {
+		if (state->matrix[r] != (uint8_t)KBD_MATRIX_IDLE) {
+			state->key_matrix_active = true;
+			break;
+		}
+	}
+	kbd_refresh_key_activity(state, key);
 }
 
 void kbd_keyup_state(struct kbd_state *state, uint8_t key) {
@@ -471,6 +520,7 @@ void kbd_keyup_state(struct kbd_state *state, uint8_t key) {
 	uint8_t mask = kbd_key_mask(key);
 	if (state->key_pending_down[key]) {
 		state->key_pending_up[key] = true;
+		kbd_refresh_key_activity(state, key);
 		return;
 	}
 	if (!(state->matrix[row] & mask)) {
@@ -485,7 +535,7 @@ static void kbd_process_pending_on_press(struct kbd_state *state, uint32_t cycle
 			/* The official mode-4 host writes the PA7 level into SFR 31h before
 			 * waking the interpreter. Some ROM bit-test paths sample the latched
 			 * SFR directly rather than invoking the GPIO read callback. */
-			if (kbd_profile(state->mmio->variant)->refresh_on_contact_level)
+			if (state->profile->refresh_on_contact_level)
 				kbd_update_porta(state);
 			kbd_cpu_wake(state, WAKE_ON);
 			kbd_trigger_press(state, KBD_ON_COLUMN_MASK);
@@ -509,6 +559,7 @@ void kbd_restore_keydown_state(struct kbd_state *state, uint8_t key) {
 	state->key_pending_up[key] = false;
 	state->key_press_cycles[key] = 0;
 	state->key_release_cycles[key] = 0;
+	kbd_refresh_key_activity(state, key);
 	kbd_activate_key(state, key);
 }
 
@@ -516,7 +567,7 @@ static void kbd_process_pending_on_release(struct kbd_state *state, uint32_t cyc
 	if (state->on_pending_up && !state->on_pending_down &&
 		kbd_countdown_elapsed(&state->on_press_cycles, cycles)) {
 		state->on_pressed = false;
-		if (kbd_profile(state->mmio->variant)->refresh_on_contact_level)
+		if (state->profile->refresh_on_contact_level)
 			kbd_update_porta(state);
 		state->on_pending_up = false;
 	}
@@ -538,6 +589,7 @@ static void kbd_process_pending_key_press(
 
 	state->key_pending_down[key] = false;
 	state->key_press_cycles[key] = 0;
+	kbd_refresh_key_activity(state, key);
 	kbd_activate_key(state, key);
 	if (state->key_pending_up[key]) {
 		kbd_schedule_release_hold(state, key);
@@ -571,6 +623,9 @@ static void kbd_process_pending_key_releases(struct kbd_state *state, uint32_t c
 }
 
 void kbd_tick_state(struct kbd_state *state, uint32_t cycles) {
+	/* CG100_PERF OPT-1: an idle keyboard needs no per-instruction servicing. */
+	if (kbd_can_skip_tick(state))
+		return;
 	kbd_process_pending_on_press(state, cycles);
 	kbd_process_pending_on_release(state, cycles);
 	kbd_process_pending_key_presses(state, cycles);
@@ -579,7 +634,7 @@ void kbd_tick_state(struct kbd_state *state, uint32_t cycles) {
 	kbd_process_pending_press(state);
 	/* sub_4255B0 continuously reapplies the active mode-4 host key level;
 	 * firmware GPIO writes must not permanently erase a held On/C input. */
-	if (kbd_profile(state->mmio->variant)->refresh_on_contact_level && state->on_pressed)
+	if (state->profile->refresh_on_contact_level && state->on_pressed)
 		kbd_update_porta(state);
 	kbd_sync_level_sensitive_inputs(state);
 	kbd_sync_latched_interrupt(state);
@@ -607,7 +662,7 @@ void kbd_set_portc_input_state(struct kbd_state *state, uint8_t mask, uint8_t va
 void kbd_set_portb_input_state(struct kbd_state *state, uint8_t mask, uint8_t value) {
 	state->portb_input_mask = (uint8_t)(mask & KBD_EPS6009_PORTB_MASK);
 	state->portb_input_value = (uint8_t)(value & state->portb_input_mask);
-	if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009)
+	if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009)
 		kbd_update_eps6009_portb(state);
 }
 
@@ -618,14 +673,16 @@ static void kbd_clear_storage(struct kbd_state *state) {
 	memset(state->key_pending_up, 0, sizeof(state->key_pending_up));
 	memset(state->key_press_cycles, 0, sizeof(state->key_press_cycles));
 	memset(state->key_release_cycles, 0, sizeof(state->key_release_cycles));
+	memset(state->event_mask, 0, sizeof(state->event_mask));
+	state->key_matrix_active = false;
 }
 
 static void kbd_apply_reset_defaults(struct kbd_state *state) {
 	state->pending_press_mask = 0;
-	if (kbd_profile(state->mmio->variant)->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
-		state->reg[eps_reg_pacon(state->mmio->variant)] = 0x0eu;
-		state->reg[eps_reg_pbcon(state->mmio->variant)] = 0x00u;
-		state->reg[eps_reg_dcrb(state->mmio->variant)] = 0x03u;
+	if (state->profile->matrix_model == KBD_MATRIX_MODEL_EPS6009) {
+		state->reg[state->traits->reg_pacon] = 0x0eu;
+		state->reg[state->traits->reg_pbcon] = 0x00u;
+		state->reg[state->traits->reg_dcrb] = 0x03u;
 		state->porta_latch = KBD_EPS6009_PORTA_MASK;
 		state->portb_latch = KBD_EPS6009_PORTB_MASK;
 		kbd_update_porta(state);

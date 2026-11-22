@@ -1,5 +1,8 @@
 #include "CPU.hpp"
 
+/* CG100_PERF OPT-3: gated, rate-limited unknown-opcode diagnostic. */
+#include "cpu_unknown_warn.h"
+
 #include "Chipset.hpp"
 #include "Emulator.hpp"
 #include "Gui/CodeViewer.hpp"
@@ -361,7 +364,7 @@ namespace casioemu {
 			OpcodeSource* handler = opcode_dispatch[impl_opcode];
 
 			if (!handler) {
-				printf("[CPU][Warn] Unknown Inst at 0x%x: %x\n", (uint32_t)pc_before, (uint32_t)impl_opcode);
+				cpu_warn_unknown_inst((uint32_t)pc_before, (uint32_t)impl_opcode);
 				continue;
 			}
 

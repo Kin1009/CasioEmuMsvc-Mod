@@ -337,10 +337,19 @@ static inline int eps_variant_is_6800_w192(enum eps_variant variant) {
 #ifdef __cplusplus
 extern "C" {
 #endif
-const struct eps_variant_traits *eps_get_variant_traits(enum eps_variant variant);
+/* CG100_PERF OPT-2: the traits are immutable; expose a fixed table so the
+ * accessor is a single indexed load instead of an out-of-line call+switch. */
+extern const struct eps_variant_traits *const eps_variant_traits_table[4];
 #ifdef __cplusplus
 }
 #endif
+
+static inline const struct eps_variant_traits *eps_get_variant_traits(enum eps_variant variant) {
+	unsigned index = (unsigned)variant;
+	if (index > (unsigned)EPS_VARIANT_6800_W192)
+		index = (unsigned)EPS_VARIANT_6800; /* same default as the old switch */
+	return eps_variant_traits_table[index];
+}
 
 static inline uint8_t eps_reg_cpucon(enum eps_variant variant) {
 	return eps_get_variant_traits(variant)->reg_cpucon;

@@ -9,7 +9,6 @@
 
 static void machine_state_init(struct machine_state *state, enum eps_variant variant);
 
-const struct eps_variant_traits *eps_get_variant_traits(enum eps_variant variant) {
 	static const struct eps_variant_traits eps6800_traits = {
 		REG_CPUCON, REG_POSTID, REG_LCDARL, REG_LCDDAT, REG_LCDARH, REG_LCDCON,
 		REG_INTSTA, REG_INTSTA, REG_TR0CON, REG_TR1CON, REG_TRL0L, REG_TRL0H,
@@ -73,18 +72,13 @@ const struct eps_variant_traits *eps_get_variant_traits(enum eps_variant variant
 			0u, 1u, 1u }
 	};
 
-	switch (variant) {
-	case EPS_VARIANT_6009:
-		return &eps6009_traits;
-	case EPS_VARIANT_9500:
-		return &eps9500_traits;
-	case EPS_VARIANT_6800_W192:
-		return &eps6800_w192_traits;
-	case EPS_VARIANT_6800:
-	default:
-		return &eps6800_traits;
-	}
-}
+/* CG100_PERF OPT-2: fixed lookup table indexed by enum eps_variant. */
+const struct eps_variant_traits *const eps_variant_traits_table[4] = {
+	&eps6800_traits,
+	&eps6009_traits,
+	&eps9500_traits,
+	&eps6800_w192_traits
+};
 
 enum machine_reset_target {
 	MACHINE_RESET_TARGET_MMIO = 0,

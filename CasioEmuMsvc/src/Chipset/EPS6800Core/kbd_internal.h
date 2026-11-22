@@ -14,6 +14,8 @@ enum {
 
 struct cpu_state;
 struct mmio_state;
+struct eps_variant_traits;
+struct eps_kbd_profile;
 
 struct kbd_state {
 	uint8_t reg[KBD_REG_COUNT];
@@ -36,6 +38,17 @@ struct kbd_state {
 	bool on_pending_down;
 	bool on_pending_up;
 	uint16_t on_press_cycles;
+
+	/* CG100_PERF OPT-1: cached silicon description (set once at connect).
+	 * Avoids the ~10-15 eps_get_variant_traits() calls/instruction that the
+	 * keyboard tick previously made through eps_reg_*()/kbd_profile(). */
+	const struct eps_variant_traits *traits;
+	const struct eps_kbd_profile *profile;
+	/* Per-key activity bitmap: bit k set iff any of the four pending
+	 * arrays for key k is nonzero. Lets the tick skip two 128-entry scans. */
+	uint32_t event_mask[4];
+	/* True when a matrix contact is physically closed (or ON held). */
+	bool key_matrix_active;
 };
 
 void kbd_connect_bus_state(struct kbd_state *state, struct cpu_state *cpu, struct mmio_state *mmio);
