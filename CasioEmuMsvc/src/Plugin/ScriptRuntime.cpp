@@ -6,8 +6,10 @@ extern "C" {
 #include <lualib.h>
 }
 
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -22,26 +24,62 @@ struct AllocState {
 	std::size_t limit = kDefaultScriptMemoryLimit;
 };
 
+// Host-side bookkeeping stored immediately before every block handed to Lua.
+// Lua's allocator callback is called with osize == a *type tag* (LUA_TTABLE,
+// LUA_TSTRING, ...) when ptr is NULL, not with the previous block size.  The
+// old accounting used `used += nsize - osize` on allocation and
+// `used -= osize` on free, so every fresh block was charged too little and
+// every free subtracted too much; after enough churn the unsigned counter
+// wrapped to ~2^64 and the 16 MiB cap stopped meaning anything.  Recording the
+// exact charge next to the user pointer makes free/realloc independent of what
+// Lua reports.  The header is aligned to max_align_t, so the returned pointer
+// keeps malloc's alignment and is safe for every Lua object type.
+struct alignas(std::max_align_t) BlockHeader {
+	std::size_t charged;
+};
+static_assert(alignof(BlockHeader) >= alignof(std::max_align_t),
+	"block header must preserve malloc alignment");
+
+BlockHeader* HeaderOf(void* user) {
+	return reinterpret_cast<BlockHeader*>(static_cast<unsigned char*>(user) - sizeof(BlockHeader));
+}
+
 // Enforces the per-plugin Lua heap cap.  Lua treats a null return as OOM and
 // turns it into a catchable Lua error; no other Lua code sees raw memory.
 void* ScriptAlloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize) {
+	(void)osize; // never trusted: see BlockHeader above
 	auto* alloc = static_cast<AllocState*>(ud);
+
 	if (nsize == 0) {
 		if (ptr) {
-			alloc->used -= osize;
-			std::free(ptr);
+			BlockHeader* header = HeaderOf(ptr);
+			// Guarded clamp: even if a count were ever inconsistent, subtract
+			// without wrapping and release the real allocation base.
+			alloc->used = header->charged <= alloc->used
+				? alloc->used - header->charged : 0;
+			std::free(header);
 		}
 		return nullptr;
 	}
-	if (nsize > alloc->limit)
+
+	// Charge the payload only (the fixed header is host bookkeeping), keeping
+	// the documented 16 MiB cap on Lua's own heap.  Compute the post-free
+	// baseline from the recorded charge so realloc cannot overflow the count.
+	const std::size_t oldCharge = ptr ? HeaderOf(ptr)->charged : 0;
+	const std::size_t baseline = (ptr && oldCharge <= alloc->used)
+		? alloc->used - oldCharge : (ptr ? 0 : alloc->used);
+	if (baseline > alloc->limit || nsize > alloc->limit - baseline)
 		return nullptr;
-	if (nsize > osize && nsize - osize > alloc->limit - alloc->used)
+	if (nsize > std::numeric_limits<std::size_t>::max() - sizeof(BlockHeader))
 		return nullptr;
-	void* result = std::realloc(ptr, nsize);
-	if (!result)
-		return nullptr;
-	alloc->used += nsize - osize;
-	return result;
+
+	void* base = std::realloc(ptr ? static_cast<void*>(HeaderOf(ptr)) : nullptr,
+		sizeof(BlockHeader) + nsize);
+	if (!base)
+		return nullptr; // realloc failure leaves the original block untouched
+	static_cast<BlockHeader*>(base)->charged = nsize;
+	alloc->used = baseline + nsize;
+	return static_cast<unsigned char*>(base) + sizeof(BlockHeader);
 }
 
 } // namespace
