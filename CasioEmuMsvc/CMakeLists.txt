@@ -11,6 +11,10 @@ option(CASIOEMU_WEB_DEBUG_INFO "Enable heavier Emscripten runtime and source-map
 option(CASIOEMU_ENABLE_SENTRY "Build the bundled Sentry/Crashpad crash reporter" ON)
 option(CASIOEMU_BUILD_SETTINGS_TESTS "Build the settings/theme smoke self-check" OFF)
 option(CASIOEMU_PLUGIN_TESTS "Build the plugin loader smoke test and register it with CTest" ON)
+# eps6800 adapter smoke: deterministic, GUI-free CPU-adapter regression suite.
+# Off by default (like the settings smoke); enable with
+# -DCASIOEMU_BUILD_EPS6800_TESTS=ON to build + register it with CTest.
+option(CASIOEMU_BUILD_EPS6800_TESTS "Build and register the eps6800 adapter smoke self-check" OFF)
 
 if(CASIOEMU_CORE_WEB)
     set(CASIOEMU_WEB ON CACHE BOOL "Core web builds use the Emscripten/WebAssembly pipeline" FORCE)
@@ -591,6 +595,33 @@ if(CASIOEMU_BUILD_SETTINGS_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE AND N
         CASIOEMU_THEMES_SOURCE_DIR="${THEMES_SOURCE_DIR}")
     set_target_properties(casioemu_settings_smoke PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+    # The target existed but was never registered, so ctest could never run it
+    # even when explicitly enabled with CASIOEMU_BUILD_SETTINGS_TESTS=ON.
+    add_test(NAME settings_smoke COMMAND casioemu_settings_smoke)
+    set_tests_properties(settings_smoke PROPERTIES TIMEOUT 120)
+endif()
+
+# ------------------------------------------------ eps6800 adapter self-check
+# tests/eps6800_adapter_smoke.cpp had no CMake target and no add_test(), so it
+# was dead code from the test harness' point of view.  It links ePSCpu.cpp plus
+# the vendored EPS6800Core/*.c sources and, with no ROM argument, runs only the
+# deterministic synthetic checks (no hardware/ROM required) — safe for CTest.
+# Gated off by default; enable with -DCASIOEMU_BUILD_EPS6800_TESTS=ON.
+if(CASIOEMU_BUILD_EPS6800_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
+    add_executable(casioemu_eps6800_adapter_smoke
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/eps6800_adapter_smoke.cpp"
+        "${SOURCE_DIR}/Chipset/ePSCpu.cpp"
+        ${MAIN_SOURCES_EPS6800_CORE})
+    target_include_directories(casioemu_eps6800_adapter_smoke PRIVATE
+        "${SOURCE_DIR}"
+        "${SOURCE_DIR}/Chipset"
+        "${SOURCE_DIR}/Chipset/EPS6800Core"
+        "${THIRD_PARTY_DIR}")
+    set_target_properties(casioemu_eps6800_adapter_smoke PROPERTIES
+        CXX_STANDARD 20
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+    add_test(NAME eps6800_adapter_smoke COMMAND casioemu_eps6800_adapter_smoke)
+    set_tests_properties(eps6800_adapter_smoke PROPERTIES TIMEOUT 120)
 endif()
 
 # --------------------------------------------------- screen worker lifetime test
