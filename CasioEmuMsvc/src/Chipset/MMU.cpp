@@ -7,6 +7,7 @@
 #include "Gui/Hooks.h"
 #include "Gui/Ui.hpp"
 #include "Logger.hpp"
+#include <algorithm>
 #include <cstring>
 
 namespace casioemu {
@@ -36,8 +37,8 @@ namespace casioemu {
 		real_hardware = emulator.ModelDefinition.real_hardware;
 	}
 
-	inline uint16_t le_read(uint8_t& a) {
-		return *(uint16_t*)&a;
+	inline uint16_t le_read(const uint8_t* p) {
+		return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
 	}
 
 	uint16_t MMU::ReadCode(size_t offset) {
@@ -60,8 +61,8 @@ namespace casioemu {
 		switch (emulator.hardware_id) {
 		case HW_ES_PLUS:
 		case HW_SOLARII:
-			if (offset < rom_size)
-				return le_read(rom[offset]);
+			if (offset + 1 < rom_size)
+				return le_read(rom + offset);
 			else
 				return 0;
 		case HW_TI_MATH_PRINT:
@@ -69,10 +70,13 @@ namespace casioemu {
 			if (emulator.chipset.SegmentAccess && segment_index == 5)
 				segment_index = 0;
 			if (segment_index < 4) {
-				if (emulator.chipset.remap)
-					return le_read(rom[offset + ((segment_index == 0 && segment_offset < 0x200) ? 0xFE00 : 0)]);
+				if (emulator.chipset.remap) {
+					const size_t ro = offset + ((segment_index == 0 && segment_offset < 0x200) ? 0xFE00 : 0);
+					return ro + 1 < rom_size ? le_read(rom + ro) : 0;
+				}
 				else
-					return (segment_index == 0 && segment_offset >= 0xFE00) ? 0xFFFF : le_read(rom[offset]);
+					return (segment_index == 0 && segment_offset >= 0xFE00) ? 0xFFFF
+						: (offset + 1 < rom_size ? le_read(rom + offset) : 0);
 			}
 			return 0;
 		case HW_CLASSWIZ_II: {
@@ -89,13 +93,16 @@ namespace casioemu {
 			// In particular, segments 6/E have no backing in a 0x60000-byte ROM.
 			if (offset >= rom_size || rom_size - offset < sizeof(uint16_t))
 				return 0xFFFF;
-			return le_read(rom[offset]);
+			return le_read(rom + offset);
 		}
 		case HW_FX_5800P:
 			if (segment_index < 2)
-				return le_read(rom[offset]);
-			if (segment_index >= 8)
-				return le_read(emulator.chipset.flash_data[offset & 0x7ffff]);
+				return offset + 1 < rom_size ? le_read(rom + offset) : 0;
+			if (segment_index >= 8) {
+				const size_t fo = offset & 0x7ffff;
+				const auto& flash = emulator.chipset.flash_data;
+				return fo + 1 < flash.size() ? le_read(flash.data() + fo) : 0;
+			}
 			return 0xFFFF;
 		case HW_EPS6800:
 		case HW_EPS6009:
@@ -264,6 +271,8 @@ namespace casioemu {
 				PANIC("MMU region double-hole at %06zX\n", ix);
 			segment_dispatch[ix >> 16][ix & 0xFFFF].region = nullptr;
 		}
-		regions.erase(std::find(regions.begin(), regions.end(), region));
+		auto it = std::find(regions.begin(), regions.end(), region);
+		if (it != regions.end())
+			regions.erase(it);
 	}
 } // namespace casioemu

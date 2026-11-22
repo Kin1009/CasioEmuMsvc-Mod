@@ -3,6 +3,7 @@
 #include "MMURegion.hpp"
 #include "Peripheral.hpp"
 #include "Ui.hpp"
+#include <mutex>
 #include <Models.h>
 #include <SDL.h>
 #include <cstring>
@@ -32,13 +33,18 @@ namespace casioemu {
 		bool ram_file_requested{};
 
 		SDL_TimerID save_timer_id{};
+		std::mutex save_mutex;
+		bool shutting_down = false;
 
 	public:
 		using Peripheral::Peripheral;
 
 		// 定时器回调函数
 		static Uint32 SaveRamCallback(Uint32 interval, void* param) {
-			static_cast<BatteryBackedRAM*>(param)->SaveRAMImage();
+			auto* self = static_cast<BatteryBackedRAM*>(param);
+			std::lock_guard lock(self->save_mutex);
+			if (!self->shutting_down)
+				self->SaveRAMImage();
 			return interval; // 继续触发定时器
 		}
 
@@ -190,14 +196,24 @@ namespace casioemu {
 	}
 
 	void BatteryBackedRAM::Uninitialise() {
+		{
+			std::lock_guard lock(save_mutex);
+			shutting_down = true;
 #ifndef CASIOEMU_DISABLE_RAM_IMAGE
-		if (emulator.hardware_id != HW_SOLARII)
-			SaveRAMImage();
+			if (emulator.hardware_id != HW_SOLARII)
+				SaveRAMImage();
+#endif
+		}
+#ifndef CASIOEMU_DISABLE_RAM_IMAGE
 		if (save_timer_id)
 			SDL_RemoveTimer(save_timer_id);
+		save_timer_id = 0;
 #endif
+		n_ram_buffer = nullptr;
 		delete[] ram_buffer;
+		ram_buffer = nullptr;
 		delete[] pram_buffer;
+		pram_buffer = nullptr;
 	}
 
 	Peripheral* CreateBatteryBackedRAM(Emulator& emu) {

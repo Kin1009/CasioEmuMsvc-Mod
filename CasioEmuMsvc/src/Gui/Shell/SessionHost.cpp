@@ -72,6 +72,7 @@ void PointGlobalsAt(int index) {
 		// window may keep a pointer to a stopped/destroyed emulator.
 		m_emu = nullptr;
 		me_mmu = nullptr;
+		n_ram_buffer = nullptr;
 		return;
 	}
 	Entry& entry = g_entries[static_cast<size_t>(index)];
