@@ -507,12 +507,17 @@ bool ScriptRuntime::Load(const std::string& source, const std::string& chunkName
 	return true;
 }
 
+// The function and its arguments must already be on the stack, and the caller
+// must hold buttons->callMutex.  Keeping the lock in the public On* entry
+// points (rather than here) means the stack preparation is serialized too: a
+// UI-thread button callback must never observe or clobber a half-built frame
+// callback stack.  The mutex is recursive so host APIs that re-enter the
+// runtime on the same thread cannot deadlock.
 bool ScriptRuntime::InvokePrepared(int argumentCount, std::string& error) {
 	if (!m_impl->L) {
 		error = "script.runtime: no Lua state";
 		return false;
 	}
-	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
 	lua_setinstrbudget(m_impl->L, m_impl->config.budget);
 	const int status = lua_pcall(m_impl->L, argumentCount, 0, 0);
 	if (status != LUA_OK) {
@@ -529,6 +534,11 @@ bool ScriptRuntime::InvokePrepared(int argumentCount, std::string& error) {
 }
 
 bool ScriptRuntime::OnFrame(double dt, std::string& error) {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
+	if (!m_impl->L) {
+		error = "script.runtime: no Lua state";
+		return false;
+	}
 	lua_settop(m_impl->L, 0);
 	lua_getglobal(m_impl->L, "on_frame");
 	if (!lua_isfunction(m_impl->L, -1)) {
@@ -542,6 +552,11 @@ bool ScriptRuntime::OnFrame(double dt, std::string& error) {
 bool ScriptRuntime::OnKey(int ki, int ko, bool down, std::string& error) {
 	if (!May(m_impl.get(), ScriptPermission::Read))
 		return true; // on_key requires emulator.read
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
+	if (!m_impl->L) {
+		error = "script.runtime: no Lua state";
+		return false;
+	}
 	lua_settop(m_impl->L, 0);
 	lua_getglobal(m_impl->L, "on_key");
 	if (!lua_isfunction(m_impl->L, -1)) {
@@ -555,6 +570,11 @@ bool ScriptRuntime::OnKey(int ki, int ko, bool down, std::string& error) {
 }
 
 bool ScriptRuntime::OnUnload(std::string& error) {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
+	if (!m_impl->L) {
+		error = "script.runtime: no Lua state";
+		return false;
+	}
 	lua_settop(m_impl->L, 0);
 	lua_getglobal(m_impl->L, "on_unload");
 	if (!lua_isfunction(m_impl->L, -1)) {
@@ -565,22 +585,28 @@ bool ScriptRuntime::OnUnload(std::string& error) {
 }
 
 void ScriptRuntime::SetBudget(unsigned long long budget) {
-	m_impl->config.budget = budget;
+	// config.budget is read by InvokePrepared under this same mutex; writing it
+	// outside the lock would leave a plain cross-thread data race even when the
+	// lua_State itself was protected.
 	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
+	m_impl->config.budget = budget;
 	m_impl->buttons->budget = budget;
 	if (m_impl->L)
 		lua_setinstrbudget(m_impl->L, 0); // refilled on next call
 }
 
 unsigned long long ScriptRuntime::Budget() const {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
 	return m_impl->config.budget;
 }
 
 std::size_t ScriptRuntime::MemoryUsed() const {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
 	return m_impl->alloc.used;
 }
 
 bool ScriptRuntime::HasCallbacks() const {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
 	if (!m_impl->L)
 		return false;
 	bool found = false;
@@ -594,11 +620,20 @@ bool ScriptRuntime::HasCallbacks() const {
 }
 
 unsigned ScriptRuntime::DeniedCount() const {
+	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
 	return m_impl->deniedCalls;
 }
 
 const std::string& ScriptRuntime::LastError() const {
+	// Writes happen under callMutex; callers use the returned reference only on
+	// the thread that made the failing call, so no extra locking is required.
 	return m_impl->lastError;
 }
+
+#ifdef CASIOEMU_SCRIPT_RUNTIME_TEST
+std::recursive_mutex& ScriptRuntime::TestCallMutex() const {
+	return m_impl->buttons->callMutex;
+}
+#endif
 
 } // namespace casioemu::plugin

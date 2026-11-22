@@ -8,9 +8,13 @@
 // A small positive test keeps the legitimate host/callback features covered.
 #include "ScriptRuntime.h"
 
+#include <atomic>
 #include <cstdint>
+#include <functional>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace casioemu::plugin;
@@ -144,6 +148,99 @@ host.log('churn ' .. sink)
 		"over-cap attempt leaves accounting within cap");
 }
 
+// Regression: OnFrame/OnKey/OnUnload used to prepare the Lua stack (settop,
+// getglobal, push args) BEFORE taking callMutex, while the UI-thread button
+// re-entry path and SetBudget took that same mutex.  A tap could therefore
+// clear a half-built frame callback stack or reset its instruction budget.
+//
+// The top-level script installs an __index metamethod on _G, so lua_getglobal
+// inside OnFrame's preamble calls host.log('PREAMBLE').  From that hook a probe
+// thread tries to lock the runtime mutex: it must FAIL, proving the preamble is
+// serialized.  A second thread installs a fresh budget while the callback is
+// still in flight; after OnFrame returns that budget must be visible, and the
+// UI re-entry path must still work (recursive mutex, no self-deadlock).
+void TestCallbackPreambleLocking() {
+	std::cout << "== regression: cross-thread lua_State serialization ==\n";
+	std::atomic<bool> lockWasFree{false};
+	std::atomic<bool> preambleSeen{false};
+	std::mutex logMutex;
+	std::vector<std::string> logs;
+	std::function<void()> buttonInvoke;
+	std::thread budgetThread;
+	ScriptRuntime* runtimePtr = nullptr;
+
+	ScriptRuntimeConfig config;
+	config.pluginId = "security.threading";
+	config.budget = 20000000ull;
+	config.permissions = static_cast<unsigned>(ScriptPermission::Read) |
+		static_cast<unsigned>(ScriptPermission::Write) |
+		static_cast<unsigned>(ScriptPermission::Inject) |
+		static_cast<unsigned>(ScriptPermission::Shell);
+	config.host.addButton = [&](const std::string&, const std::string&,
+		std::function<void()> invoke) {
+		buttonInvoke = std::move(invoke);
+		return 7;
+	};
+	config.host.log = [&](const std::string& text) {
+		{
+			std::lock_guard<std::mutex> guard(logMutex);
+			logs.push_back(text);
+		}
+		if (text != "PREAMBLE")
+			return;
+		preambleSeen = true;
+		// try_lock is non-blocking: safe to join here even when the fix holds
+		// the mutex for the whole preamble.
+		std::thread probe([&] {
+			std::recursive_mutex& mutex = runtimePtr->TestCallMutex();
+			if (mutex.try_lock()) {
+				lockWasFree = true;
+				mutex.unlock();
+			}
+		});
+		probe.join();
+		// A real budget install from the UI thread must wait for this callback
+		// to finish; it is joined after OnFrame returns to avoid self-deadlock.
+		budgetThread = std::thread([&] { runtimePtr->SetBudget(12345ull); });
+	};
+
+	ScriptRuntime runtime(std::move(config));
+	runtimePtr = &runtime;
+
+	const std::string source = R"(
+local real_on_frame = function(dt) host.log('frame=' .. tostring(dt)) end
+setmetatable(_G, {
+  __index = function(t, k)
+    if k == 'on_frame' then host.log('PREAMBLE') return real_on_frame end
+  end
+})
+host.ui_add_button('w', 'b', function() host.log('button') end)
+)";
+	std::string error;
+	Check(runtime.Load(source, "threading.lua", error), "threading script loads");
+	Check(static_cast<bool>(buttonInvoke), "ui_add_button handed back an invoke callback");
+
+	std::string frameError;
+	Check(runtime.OnFrame(0.016, frameError) && frameError.empty(),
+		"frame callback with concurrent budget install succeeds");
+	Check(preambleSeen.load(), "preamble hook was reached");
+	Check(!lockWasFree.load(),
+		"lua_State mutex is held during the whole frame preamble (no clobber window)");
+
+	if (budgetThread.joinable())
+		budgetThread.join();
+	Check(runtime.Budget() == 12345ull, "concurrent budget install took effect");
+
+	// The UI-thread re-entry path must still work once the callback released
+	// the mutex, and must not deadlock against the recursive serialization lock.
+	std::thread buttonThread([&] { buttonInvoke(); });
+	buttonThread.join();
+	{
+		std::lock_guard<std::mutex> guard(logMutex);
+		Check(Contains(logs, "button"), "button re-entry still works after frame callback");
+	}
+}
+
 // Guard against collateral damage to the documented script API.
 void TestLegitFeatures() {
 	std::cout << "== positive: legitimate script API ==\n";
@@ -177,6 +274,7 @@ int main() {
 	TestCloseEscape();
 	TestBytecodeEscape();
 	TestMemoryAccounting();
+	TestCallbackPreambleLocking();
 	TestLegitFeatures();
 	std::cout << (g_failures == 0 ? "RESULT: PASS" : "RESULT: FAIL")
 		<< " (" << (g_checks - g_failures) << "/" << g_checks << ")\n";

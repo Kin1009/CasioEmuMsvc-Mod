@@ -716,6 +716,9 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
     target_include_directories(casioemu_script_runtime_security PRIVATE
         "${SOURCE_DIR}"
         "${SOURCE_DIR}/Plugin")
+    # Enables the test-only TestCallMutex() seam used by the cross-thread
+    # lua_State serialization regression.  Production builds never define it.
+    target_compile_definitions(casioemu_script_runtime_security PRIVATE CASIOEMU_SCRIPT_RUNTIME_TEST)
     set_target_properties(casioemu_script_runtime_security PROPERTIES
         CXX_STANDARD 20
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")

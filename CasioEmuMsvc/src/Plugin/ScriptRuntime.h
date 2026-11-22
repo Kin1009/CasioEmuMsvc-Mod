@@ -15,6 +15,10 @@
 #include <memory>
 #include <string>
 
+#ifdef CASIOEMU_SCRIPT_RUNTIME_TEST
+#include <mutex>
+#endif
+
 struct lua_State;
 
 namespace casioemu::plugin {
@@ -115,8 +119,15 @@ public:
 	[[nodiscard]] unsigned DeniedCount() const;
 	[[nodiscard]] const std::string& LastError() const;
 
+#ifdef CASIOEMU_SCRIPT_RUNTIME_TEST
+	// Test-only seam: lets the race regression assert from a foreign thread
+	// that the lua_State mutex is held for the whole callback preamble.
+	[[nodiscard]] std::recursive_mutex& TestCallMutex() const;
+#endif
+
 private:
 	// The callback function and its arguments must already be on the stack.
+	// The caller must hold the runtime's single lua_State mutex.
 	[[nodiscard]] bool InvokePrepared(int argumentCount, std::string& error);
 	std::unique_ptr<ScriptRuntimeImpl> m_impl;
 };
