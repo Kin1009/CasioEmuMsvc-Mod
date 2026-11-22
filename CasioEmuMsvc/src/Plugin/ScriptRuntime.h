@@ -27,6 +27,12 @@ inline constexpr const char* kScriptEngineLua54 = "lua54";
 inline constexpr int kScriptApiVersion = 1;
 inline constexpr unsigned long long kDefaultScriptBudget = 20000000ull;
 inline constexpr unsigned long long kMaxScriptBudget = 200000000ull;
+// `0` is NOT a valid script budget.  The VM's instr_budget == 0 means
+// "unlimited", so a plugin whose budget resolved to 0 could loop forever.
+// Host inputs (config.budget / SetBudget) clamp 0 to this value instead: the
+// first VM instruction exhausts it.  "Unlimited" stays an explicit host-only
+// setup state inside ScriptRuntime.cpp, never reachable from Lua.
+inline constexpr unsigned long long kMinScriptBudget = 1ull;
 inline constexpr std::size_t kDefaultScriptMemoryLimit = 16ull * 1024ull * 1024ull;
 
 // Permission bits checked by the C functions bound into the `host` table.
@@ -112,6 +118,10 @@ public:
 	bool OnKey(int ki, int ko, bool down, std::string& error);
 	bool OnUnload(std::string& error);
 
+	// Installs the instruction budget for the next Load/callback/button tap.
+	// A `0` argument is clamped to kMinScriptBudget (immediate exhaustion),
+	// never interpreted as "unlimited".  There is deliberately no public API
+	// that lets a script install an unlimited budget.
 	void SetBudget(unsigned long long budget);
 	[[nodiscard]] unsigned long long Budget() const;
 	[[nodiscard]] std::size_t MemoryUsed() const;

@@ -148,6 +148,46 @@ host.log('churn ' .. sink)
 		"over-cap attempt leaves accounting within cap");
 }
 
+// Escape 4: the VM patch's instr_budget == 0 means "unlimited".  A plugin
+// budget resolving to 0 (via config or SetBudget) used to let an infinite loop
+// hang the host forever (rc=124 under a wall-clock killer).  Zero must now be
+// immediate exhaustion on both paths, with no script-reachable "unlimited".
+void TestZeroBudgetIsNotUnlimited() {
+	std::cout << "== regression: budget 0 is never unlimited ==\n";
+	const std::string infiniteLoop = "host.log('BEFORE_LOOP') while true do end";
+
+	std::vector<std::string> logs;
+	ScriptRuntime fromConfig = MakeRuntime(&logs, 0ull);
+	Check(fromConfig.Budget() == kMinScriptBudget,
+		"config.budget=0 clamped to one instruction (not unlimited)");
+	std::string configError;
+	Check(!fromConfig.Load(infiniteLoop, "zero_config.lua", configError),
+		"config.budget=0 rejects an infinite-loop chunk");
+	Check(configError.find("script.budget:") == 0 &&
+		configError.find("instruction budget exhausted") != std::string::npos,
+		"config.budget=0 returns a budget error, not a hang");
+	Check(!Contains(logs, "BEFORE_LOOP"),
+		"config.budget=0 fails before any script instruction runs");
+
+	logs.clear();
+	ScriptRuntime viaSetter = MakeRuntime(&logs, 20000000ull);
+	viaSetter.SetBudget(0ull);
+	Check(viaSetter.Budget() == kMinScriptBudget,
+		"SetBudget(0) clamped to one instruction (not unlimited)");
+	std::string setterError;
+	Check(!viaSetter.Load(infiniteLoop, "zero_setter.lua", setterError),
+		"SetBudget(0) rejects an infinite-loop chunk");
+	Check(setterError.find("script.budget:") == 0 &&
+		setterError.find("instruction budget exhausted") != std::string::npos,
+		"SetBudget(0) returns a budget error, not a hang");
+
+	// A real refill must still clear the sticky exhausted state.
+	viaSetter.SetBudget(20000ull);
+	std::string refillError;
+	Check(viaSetter.Load("host.log('REFILLED')", "zero_refill.lua", refillError) &&
+		Contains(logs, "REFILLED"), "normal budget refills after zero-budget exhaustion");
+}
+
 // Regression: OnFrame/OnKey/OnUnload used to prepare the Lua stack (settop,
 // getglobal, push args) BEFORE taking callMutex, while the UI-thread button
 // re-entry path and SetBudget took that same mutex.  A tap could therefore
@@ -274,6 +314,7 @@ int main() {
 	TestCloseEscape();
 	TestBytecodeEscape();
 	TestMemoryAccounting();
+	TestZeroBudgetIsNotUnlimited();
 	TestCallbackPreambleLocking();
 	TestLegitFeatures();
 	std::cout << (g_failures == 0 ? "RESULT: PASS" : "RESULT: FAIL")

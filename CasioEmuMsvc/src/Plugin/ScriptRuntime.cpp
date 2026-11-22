@@ -24,6 +24,22 @@ struct AllocState {
 	std::size_t limit = kDefaultScriptMemoryLimit;
 };
 
+// The VM patch defines instr_budget == 0 as "unlimited".  That sentinel must
+// never come from a plugin-controlled budget: config.budget and SetBudget()
+// used to accept 0, so a chunk such as `while true do end` hung the host
+// forever (rc=124).  Clamp 0 to one instruction: the first vmfetch() exhausts
+// it and raises the regular "instruction budget exhausted" error.
+unsigned long long NormalizeScriptBudget(unsigned long long requested) {
+	return requested == 0 ? kMinScriptBudget : requested;
+}
+
+// The only "unlimited" path left, and it is host-only: no script code can run
+// at state-setup time, and this helper is file-local (never bound into Lua).
+// Every script entry point installs a normalized, nonzero budget first.
+void DisarmBudgetForHostOnly(lua_State* L) {
+	lua_setinstrbudget(L, 0);
+}
+
 // Host-side bookkeeping stored immediately before every block handed to Lua.
 // Lua's allocator callback is called with osize == a *type tag* (LUA_TTABLE,
 // LUA_TSTRING, ...) when ptr is NULL, not with the previous block size.  The
@@ -447,6 +463,7 @@ void RegisterSafeLibraries(lua_State* L) {
 ScriptRuntime::ScriptRuntime(ScriptRuntimeConfig config)
 	: m_impl(std::make_unique<ScriptRuntimeImpl>()) {
 	m_impl->config = std::move(config);
+	m_impl->config.budget = NormalizeScriptBudget(m_impl->config.budget);
 	m_impl->alloc.limit = m_impl->config.memoryLimit;
 	m_impl->L = lua_newstate(ScriptAlloc, &m_impl->alloc);
 	if (!m_impl->L) {
@@ -458,8 +475,9 @@ ScriptRuntime::ScriptRuntime(ScriptRuntimeConfig config)
 	m_impl->buttons->log = m_impl->config.host.log;
 	RegisterSafeLibraries(m_impl->L);
 	RegisterHostTable(m_impl->L, m_impl.get());
-	// Start deterministic: no budget active outside a host-invoked call.
-	lua_setinstrbudget(m_impl->L, 0);
+	// Start deterministic: host-only unlimited state, before any script code
+	// can exist.  All later states are armed with a nonzero script budget.
+	DisarmBudgetForHostOnly(m_impl->L);
 }
 
 ScriptRuntime::~ScriptRuntime() {
@@ -587,12 +605,14 @@ bool ScriptRuntime::OnUnload(std::string& error) {
 void ScriptRuntime::SetBudget(unsigned long long budget) {
 	// config.budget is read by InvokePrepared under this same mutex; writing it
 	// outside the lock would leave a plain cross-thread data race even when the
-	// lua_State itself was protected.
+	// lua_State itself was protected.  Normalize before taking the lock: 0 is
+	// immediate exhaustion, never the VM's unlimited sentinel.
+	const unsigned long long effective = NormalizeScriptBudget(budget);
 	std::lock_guard<std::recursive_mutex> guard(m_impl->buttons->callMutex);
-	m_impl->config.budget = budget;
-	m_impl->buttons->budget = budget;
+	m_impl->config.budget = effective;
+	m_impl->buttons->budget = effective;
 	if (m_impl->L)
-		lua_setinstrbudget(m_impl->L, 0); // refilled on next call
+		lua_setinstrbudget(m_impl->L, effective); // armed, nonzero: no unlimited window
 }
 
 unsigned long long ScriptRuntime::Budget() const {
