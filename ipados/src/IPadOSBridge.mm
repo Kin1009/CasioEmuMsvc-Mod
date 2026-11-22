@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <mutex>
+#include <string>
 
 // Defined in IPadOSKeypad.cpp; keeps Ui.hpp out of this translation unit.
 void IPadOSOpenSettingsWindow();
@@ -46,6 +47,7 @@ didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
 @end
 
 namespace {
+
 UIWindow* KeyWindow() {
     if (@available(iOS 15.0, *)) {
         for (UIScene* scene in [UIApplication sharedApplication].connectedScenes) {
@@ -163,6 +165,24 @@ void Present(bool directories, std::function<void(std::filesystem::path)> callba
 // Public C++ API
 // ---------------------------------------------------------------------------
 namespace casioemu::ipados {
+
+void SetBundleResourcePaths() {
+    @autoreleasepool {
+        NSString* resourcePath = [NSBundle mainBundle].resourcePath;
+        if (!resourcePath)
+            return;
+        const std::string bundle([resourcePath UTF8String]);
+        if (!std::getenv("CASIOEMU_MODELS_DIR")) {
+            const std::string models = bundle + "/models";
+            setenv("CASIOEMU_MODELS_DIR", models.c_str(), 1);
+        }
+        if (!std::getenv("CASIOEMU_IPADOS_PLUGINS_DIR")) {
+            const std::string plugins = bundle + "/Plugins";
+            setenv("CASIOEMU_IPADOS_PLUGINS_DIR", plugins.c_str(), 1);
+        }
+        NSLog(@"[ipados] bundle resources: %@ (models + Plugins)", resourcePath);
+    }
+}
 
 void ConfigureWindow(void* sdlWindow) {
     @autoreleasepool {
@@ -292,6 +312,7 @@ void SystemDialogs::SaveFolderDialog(std::function<void(std::filesystem::path)> 
 #else // non-iPad fallbacks (kept so the file can be compiled on macOS in tests)
 
 namespace casioemu::ipados {
+void SetBundleResourcePaths() {}
 void ConfigureWindow(void*) {}
 void GetSafeAreaInsets(float& l, float& t, float& r, float& b) { l = t = r = b = 0; }
 bool IsMultiTaskingActive() { return false; }

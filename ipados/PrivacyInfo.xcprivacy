@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key><false/>
+    <key>NSPrivacyTrackingDomains</key><array/>
+    <key>NSPrivacyCollectedDataTypes</key><array/>
+    <!-- This build calls no API that requires an NSError/UserDefaults/FileTimestamp
+         required-reason declaration. Revisit if the online model client is enabled
+         with TLS or new SDK APIs are introduced. -->
+    <key>NSPrivacyAccessedAPITypes</key><array/>
+</dict>
+</plist>

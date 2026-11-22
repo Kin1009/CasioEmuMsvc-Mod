@@ -471,6 +471,14 @@ void ThemeManager::UpdateUIScale() {
 	io.FontGlobalScale = std::max(fontScale, 0.75f);
 
 	float touchScale = std::max(fontScale, 1.0f);
+#ifdef CASIOEMU_IPADOS
+	// Apple HIG: 44x44 pt is the minimum comfortable touch target. SDL reports
+	// logical points on iPadOS, so the DPI-derived fontScale can be < 1.0 in
+	// landscape (iPad mini 7 is 1133x744 pt) and would otherwise leave 38 px
+	// buttons. Enforce a floor independent of resolution.
+	constexpr float kIpadTouchTarget = 44.0f;
+	touchScale = std::max(touchScale, kIpadTouchTarget / 38.0f);
+#endif
 	padding = 9.5f * touchScale;
 	buttonHeight = 38.0f * touchScale;
 	minColumnWidth = 55.0f * fontScale;
@@ -486,6 +494,10 @@ void ThemeManager::UpdateUIScale() {
 
 	style.ScrollbarSize = 24.0f * touchScale;
 	style.GrabMinSize = 30.0f * touchScale;
+#ifdef CASIOEMU_IPADOS
+	style.GrabMinSize = std::max(style.GrabMinSize, kIpadTouchTarget);
+	style.ScrollbarSize = std::max(style.ScrollbarSize, kIpadTouchTarget);
+#endif
 	style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
 	style.MouseCursorScale = 1.2f * touchScale;
 

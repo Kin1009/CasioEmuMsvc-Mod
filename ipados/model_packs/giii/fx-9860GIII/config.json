@@ -1,0 +1,305 @@
+{
+  "format": "CasioEmuMsvc.ModelInfo",
+  "version": 1,
+  "model_name": "fx-9860GIII",
+  "hardware_id": 10,
+  "csr_mask": 0,
+  "real_hardware": true,
+  "pd_value": 0,
+  "interface_path": "interface.png",
+  "rom_path": "",
+  "flash_path": "os.bin",
+  "ink_color": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "enable_new_screen": false,
+  "is_sample_rom": false,
+  "legacy_ko": false,
+  "u16_mode": true,
+  "large_model": true,
+  "ml620_mirroring": false,
+  "board_path": "board.svg",
+  "screen_width": 128,
+  "screen_height": 64,
+  "screen_scale_y": 1.0,
+  "sprites": {
+    "rsd_interface": {
+      "src": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1180
+      },
+      "dest": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1180
+      }
+    }
+  },
+  "buttons": [
+    {
+      "index": 0,
+      "keyname": "F1",
+      "kiko": 145
+    },
+    {
+      "index": 1,
+      "keyname": "F2",
+      "kiko": 146
+    },
+    {
+      "index": 2,
+      "keyname": "F3",
+      "kiko": 147
+    },
+    {
+      "index": 3,
+      "keyname": "F4",
+      "kiko": 148
+    },
+    {
+      "index": 4,
+      "keyname": "F5",
+      "kiko": 149
+    },
+    {
+      "index": 5,
+      "keyname": "F6",
+      "kiko": 150
+    },
+    {
+      "index": 6,
+      "keyname": "LSHIFT",
+      "kiko": 129
+    },
+    {
+      "index": 7,
+      "keyname": "LALT",
+      "kiko": 130
+    },
+    {
+      "index": 8,
+      "keyname": "LCONTROL",
+      "kiko": 131
+    },
+    {
+      "index": 9,
+      "keyname": "M",
+      "kiko": 132
+    },
+    {
+      "index": 10,
+      "keyname": "LEFT",
+      "kiko": 133
+    },
+    {
+      "index": 11,
+      "keyname": "UP",
+      "kiko": 134
+    },
+    {
+      "index": 12,
+      "keyname": "A",
+      "kiko": 113
+    },
+    {
+      "index": 13,
+      "keyname": "2",
+      "kiko": 114
+    },
+    {
+      "index": 14,
+      "keyname": "6",
+      "kiko": 115
+    },
+    {
+      "index": 15,
+      "keyname": "ESCAPE",
+      "kiko": 116
+    },
+    {
+      "index": 16,
+      "keyname": "DOWN",
+      "kiko": 117
+    },
+    {
+      "index": 17,
+      "keyname": "RIGHT",
+      "kiko": 118
+    },
+    {
+      "index": 18,
+      "keyname": "X",
+      "kiko": 97
+    },
+    {
+      "index": 19,
+      "keyname": "L",
+      "kiko": 98
+    },
+    {
+      "index": 20,
+      "keyname": "N",
+      "kiko": 99
+    },
+    {
+      "index": 21,
+      "keyname": "S",
+      "kiko": 100
+    },
+    {
+      "index": 22,
+      "keyname": "C",
+      "kiko": 101
+    },
+    {
+      "index": 23,
+      "keyname": "T",
+      "kiko": 102
+    },
+    {
+      "index": 24,
+      "keyname": "D",
+      "kiko": 81
+    },
+    {
+      "index": 25,
+      "keyname": "F",
+      "kiko": 82
+    },
+    {
+      "index": 26,
+      "keyname": "LEFTBRACKET",
+      "kiko": 83
+    },
+    {
+      "index": 27,
+      "keyname": "RIGHTBRACKET",
+      "kiko": 84
+    },
+    {
+      "index": 28,
+      "keyname": "COMMA",
+      "kiko": 85
+    },
+    {
+      "index": 29,
+      "keyname": "TAB",
+      "kiko": 86
+    },
+    {
+      "index": 30,
+      "keyname": "7",
+      "kiko": 65
+    },
+    {
+      "index": 31,
+      "keyname": "8",
+      "kiko": 66
+    },
+    {
+      "index": 32,
+      "keyname": "9",
+      "kiko": 67
+    },
+    {
+      "index": 33,
+      "keyname": "BACKSPACE",
+      "kiko": 68
+    },
+    {
+      "index": 34,
+      "keyname": "4",
+      "kiko": 49
+    },
+    {
+      "index": 35,
+      "keyname": "5",
+      "kiko": 50
+    },
+    {
+      "index": 36,
+      "keyname": "6",
+      "kiko": 51
+    },
+    {
+      "index": 37,
+      "keyname": "MULTIPLY",
+      "kiko": 52
+    },
+    {
+      "index": 38,
+      "keyname": "SLASH",
+      "kiko": 53
+    },
+    {
+      "index": 39,
+      "keyname": "1",
+      "kiko": 33
+    },
+    {
+      "index": 40,
+      "keyname": "2",
+      "kiko": 34
+    },
+    {
+      "index": 41,
+      "keyname": "3",
+      "kiko": 35
+    },
+    {
+      "index": 42,
+      "keyname": "PLUS",
+      "kiko": 36
+    },
+    {
+      "index": 43,
+      "keyname": "MINUS",
+      "kiko": 37
+    },
+    {
+      "index": 44,
+      "keyname": "0",
+      "kiko": 17
+    },
+    {
+      "index": 45,
+      "keyname": "PERIOD",
+      "kiko": 18
+    },
+    {
+      "index": 46,
+      "keyname": "E",
+      "kiko": 19
+    },
+    {
+      "index": 47,
+      "keyname": "KP_MINUS",
+      "kiko": 20
+    },
+    {
+      "index": 48,
+      "keyname": "RETURN",
+      "kiko": 21
+    },
+    {
+      "index": 49,
+      "keyname": "F12",
+      "kiko": 7
+    }
+  ],
+  "extra": {
+    "arch_provider": "sh3.giii.skeleton",
+    "arch_architecture": "sh4a",
+    "arch_fb_width": "128",
+    "arch_fb_height": "64",
+    "arch_cycles_per_second": "58000000",
+    "arch_cabi_prefix": "giii_",
+    "arch_power_key_row": "0",
+    "arch_power_key_col": "7"
+  }
+}

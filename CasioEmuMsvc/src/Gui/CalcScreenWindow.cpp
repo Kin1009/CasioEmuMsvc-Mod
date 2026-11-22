@@ -12,6 +12,7 @@
 #include "DiagScreenDetector.h"
 #include "Peripheral/Screen.hpp"
 #include "Shell/SessionHost.h"
+#include "ToolUi.hpp"
 
 #include <SDL.h>
 
@@ -81,11 +82,11 @@ public:
 			return;
 		}
 
-		float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
-		// The diag macro button adds one more controls line on arch-core
-		// sessions; reserve it so the Fit / zoom row stays inside the panel.
-		if (m_emu && m_emu->HasArchitectureCore())
-			footer += ImGui::GetFrameHeightWithSpacing();
+		// The calculator panel keeps only ONE zoom control row. Reserve its real
+		// height (44 pt minimum touch target on iPadOS) plus one gap so a fitted
+		// 128x64 or 396x224 face never grows underneath the controls.
+		const float footer = std::max(ImGui::GetFrameHeightWithSpacing(), 44.0f) +
+		                     ImGui::GetStyle().ItemSpacing.y;
 
 #ifdef SINGLE_WINDOW
 		// The whole calculator, as the external window used to render it.  Use
@@ -178,93 +179,52 @@ private:
 		}
 	}
 
-	// --- Genuine OS diag entry buttons (plugin/arch cores only) --------------
-	// These do NOT press keys. Each calls the plugin's state-configure+reboot
-	// export: the plugin patches REAL calculator state (mode 0: factory-blank
-	// flash model word 0x300 = FF FF FF FF; mode 1: exam marker erased and the
-	// boot key-combo held IN THE CORE), resets the CPU to the reset vector, and
-	// lets the OS itself enter diag on the next boot. No fake text is drawn and
-	// no diagnostic function is called from the host. The plugin holds/releases
-	// the in-core combo itself (via its normal Tick loop), so no UI key handling
-	// is involved at all.
-	void StartDiag(int mode) {
-		if (!m_emu || !m_emu->HasArchitectureCore())
-			return;
-		if (diag_cooldown_ && std::chrono::steady_clock::now() - diag_last_click_ <
-		                          std::chrono::milliseconds(1500))
-			return; // re-entry guard: do not interrupt an in-progress diag boot
-		diag_last_click_ = std::chrono::steady_clock::now();
-		diag_cooldown_ = true;
-		m_emu->ArchEnterDiag(mode);
-		diag_status_ = mode == 0
-			? "SERVICE diag: factory-blank 0x300, booting..."
-			: "FACTORY diag: combo held in-core, booting (auto-release after boot)...";
+	// Zoom is the only state this panel owns now. CG100 / SH4 diagnostics and
+	// reset live in the session's Hardware tab (see HwController.cpp) so a touch
+	// user never has to hit a long, multi-button row underneath the calculator.
+	void StepZoom(float delta) {
+		fit_ = false;
+		zoom_ = std::clamp(std::round((zoom_ + delta) * 100.0f) / 100.0f, 0.25f, 4.0f);
 	}
 
 	void DrawControls(int width, int height) {
-		if (m_emu && m_emu->HasArchitectureCore()) {
-			const bool diag_running = false; // calls are synchronous; guard is time-based
-			if (diag_running)
-				ImGui::BeginDisabled(); // cannot re-trigger while a diag boot is in progress
-			const bool svc_clicked = ImGui::Button("To diagnostics mode (SERVICE)");
-			const bool svc_tip = ImGui::IsItemHovered();
-			ImGui::SameLine();
-			const bool fac_clicked = ImGui::Button("To diagnostics mode (FACTORY)");
-			const bool fac_tip = ImGui::IsItemHovered();
-			if (diag_running)
-				ImGui::EndDisabled();
-			if (svc_clicked && !diag_running)
-				StartDiag(0); // factory-blank flash 0x300 -> service menu
-			if (fac_clicked && !diag_running)
-				StartDiag(1); // boot key-combo gate -> DIAGNOSTIC MODE
-			if (!diag_status_.empty()) {
-				ImGui::SameLine();
-				ImGui::TextUnformatted(diag_status_.c_str());
-			}
-			if (svc_tip)
-				ImGui::SetTooltip("Patches the factory-blank flash model word (0x300 = FF FF FF FF) and RESETs. The OS's own boot gate enters the [BaseROM MAIN] SERVICE menu (1.PATTERN 5.SERVICE / 4.VERSION ...). No keys, no fake output.");
-			if (fac_tip)
-				ImGui::SetTooltip("Erases the exam marker, RESETs, and holds AC + x10^x + ON IN THE CORE. The OS's own boot gate enters '=DIAGNOSTIC MODE= / Factory Use Only!'. The combo is released once the dialog appears; no UI keypresses or fake output.");
-			ImGui::SameLine();
-			const bool reboot_clicked = ImGui::Button("Reboot");
-			const bool reboot_tip = ImGui::IsItemHovered();
-			if (reboot_clicked)
-				m_emu->ArchReboot();
-			if (reboot_tip)
-				ImGui::SetTooltip("Physical RESET button: true CPU reset to the reset vector (0x80000000), then boot the OS fresh");
+		// iPadOS touch audit: a 0.01x step, a 110 px slider and SmallButton()
+		// targets are not usable with a finger. Every control here is at least
+		// 44 pt tall, steps a visible 0.25x, and wraps instead of overflowing a
+		// narrow Stage Manager pane. The CG100 diag/reboot buttons were moved to
+		// the session Hardware tab; this panel is zoom-only on every platform.
+		const float kTouch = 44.0f;
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+			ImVec2(ImGui::GetStyle().FramePadding.x,
+			       std::max(8.0f, (kTouch - ImGui::GetTextLineHeight()) * 0.5f)));
+
+		if (ImGui::Button(fit_ ? "Fit (on)" : "Fit", ImVec2(kTouch * 1.9f, kTouch)))
+			fit_ = true;
+		ToolUi::SameLineOrWrap(kTouch * 1.9f);
+		const bool one_to_one = !fit_ && std::abs(zoom_ - 1.0f) < 0.001f;
+		if (ImGui::Button(one_to_one ? "1:1 (on)" : "1:1", ImVec2(kTouch * 1.9f, kTouch))) {
+			fit_ = false;
+			zoom_ = 1.0f;
 		}
-		ImGui::Checkbox("Fit", &fit_);
-		ImGui::SameLine();
-		bool original = !fit_ && std::abs(zoom_ - 1.0f) < 0.001f;
-		if (ImGui::Checkbox("Original size (1:1)", &original)) {
-			if (original) {
-				fit_ = false;
-				zoom_ = 1.0f;
-			} else {
-				fit_ = true;
-			}
+		ToolUi::SameLineOrWrap(kTouch);
+		if (ImGui::Button("-", ImVec2(kTouch, kTouch)))
+			StepZoom(-0.25f);
+		ToolUi::SameLineOrWrap(220.0f);
+		ImGui::SetNextItemWidth(220.0f);
+		if (ImGui::SliderFloat("##zoom", &zoom_, 0.25f, 4.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+			fit_ = false;
+			zoom_ = std::round(zoom_ * 100.0f) / 100.0f;
 		}
-		if (!fit_) {
-			// The slider moves in whole pixels of its own track, so some exact
-			// values (2.00x) can be skipped.  Keep two decimals and let the
-			// buttons step precisely.
-			ImGui::SameLine();
-			if (ImGui::SmallButton("-##zoom"))
-				zoom_ = std::max(0.25f, std::round((zoom_ - 0.01f) * 100.0f) / 100.0f);
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(110.0f);
-			if (ImGui::SliderFloat("##zoom", &zoom_, 0.25f, 8.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp))
-				zoom_ = std::round(zoom_ * 100.0f) / 100.0f;
-			ImGui::SameLine();
-			if (ImGui::SmallButton("+##zoom"))
-				zoom_ = std::min(8.0f, std::round((zoom_ + 0.01f) * 100.0f) / 100.0f);
-		}
-		ImGui::SameLine();
+		ToolUi::SameLineOrWrap(kTouch);
+		if (ImGui::Button("+", ImVec2(kTouch, kTouch)))
+			StepZoom(0.25f);
+		ToolUi::SameLineOrWrap(110.0f);
 		ImGui::TextDisabled("%dx%d", width, height);
 		if (m_emu && m_emu->GetPaused()) {
-			ImGui::SameLine();
+			ToolUi::SameLineOrWrap(70.0f);
 			ImGui::TextDisabled("(paused)");
 		}
+		ImGui::PopStyleVar();
 	}
 
 	void RecreateTexture(int width, int height) {
@@ -288,10 +248,6 @@ private:
 	bool fit_ = true;
 	float zoom_ = 2.0f;
 	std::vector<uint8_t> frame_;
-
-	bool diag_cooldown_ = false;                 // re-entry guard for diag buttons
-	std::chrono::steady_clock::time_point diag_last_click_{};
-	std::string diag_status_;
 };
 
 UIWindow* CreateCalcScreenWindow() {

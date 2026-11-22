@@ -3,6 +3,7 @@
 #include "Plugin/PluginManifest.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 
@@ -18,6 +19,10 @@ void LogLine(const std::string& line) {
 } // namespace
 
 std::filesystem::path BundlePluginsDirectory() {
+    // The UIKit bridge sets this to <app>/Plugins at startup so discovery does
+    // not depend on the process working directory (Stage Manager / Files launch).
+    if (const char* override = std::getenv("CASIOEMU_IPADOS_PLUGINS_DIR"))
+        return std::filesystem::path(override);
     // On iOS the bundle root is the .app directory; resources live directly in
     // it (NSBundle.mainBundle.resourcePath == .app path).
     return std::filesystem::path("Plugins");

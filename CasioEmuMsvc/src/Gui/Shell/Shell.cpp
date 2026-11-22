@@ -2301,11 +2301,17 @@ void RenderSidebar(const ThemePalette& palette, ImVec2 pos, ImVec2 size) {
 }
 
 void RenderWelcome(const ThemePalette& palette) {
-	const float pad = 32.0f;
+	// iPadOS touch audit: the old 24 px button and default-height Selectables
+	// were far below Apple's 44 pt minimum. iPad mini (7th gen) is 744x1133 pt
+	// in portrait, so the two-column layout also collapses to one column.
+	const float display_w = ImGui::GetIO().DisplaySize.x;
+	const float pad = display_w < 820.0f ? 16.0f : 32.0f;
 	const float available = std::max(200.0f, ImGui::GetWindowWidth() - pad * 2.0f);
+	const float kRow = 44.0f;
+	const bool narrow = available < 620.0f;
 	if (FontInAtlas(g_welcome_font))
 		ImGui::PushFont(g_welcome_font);
-	ImGui::SetCursorPos(ImVec2(pad, 22.0f));
+	ImGui::SetCursorPos(ImVec2(pad, 18.0f));
 	ImGui::PushStyleColor(ImGuiCol_Text, palette.foreground);
 	ImGui::TextUnformatted("CasioEmuMsvc");
 	ImGui::PopStyleColor();
@@ -2316,29 +2322,26 @@ void RenderWelcome(const ThemePalette& palette) {
 	ImGui::TextDisabled("%s", L("Shell.Subtitle", "Casio nX-U8/100 & nX-U16/100 emulator"));
 	ImGui::PopTextWrapPos();
 
-	ImGui::Dummy(ImVec2(0.0f, 14.0f));
+	ImGui::Dummy(ImVec2(0.0f, 12.0f));
 	LoadModelChoices();
 
 	ImGui::SetCursorPosX(pad);
 	const float body_height = std::max(240.0f, ImGui::GetContentRegionAvail().y - 6.0f);
-	if (ImGui::BeginTable("##welcome_columns", 2,
-			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings)) {
-		ImGui::TableSetupColumn("Models", ImGuiTableColumnFlags_WidthStretch, 0.58f);
-		ImGui::TableSetupColumn("Start", ImGuiTableColumnFlags_WidthStretch, 0.42f);
-		ImGui::TableNextRow();
 
-		// Left column is the primary navigation: every installed model, not a
-		// short recent list.  Recent sessions are already represented here.
-		ImGui::TableSetColumnIndex(0);
+	// All models is the primary navigation. Recent sessions are represented
+	// here too; no hidden recent-only list.
+	auto renderModels = [&]() {
 		ImGui::TextDisabled("%s", L("Shell.AllModels", "All models"));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 14.0f));
 		ImGui::SetNextItemWidth(-1.0f);
 		ImGui::InputTextWithHint("##welcome_model_search", L("Shell.SearchModels", "Search models"),
 			g.welcomeModelQuery, sizeof(g.welcomeModelQuery));
-		ImGui::Dummy(ImVec2(0.0f, 4.0f));
+		ImGui::PopStyleVar();
+		ImGui::Dummy(ImVec2(0.0f, 6.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
 		ImGui::BeginChild("##welcome_model_list",
-			ImVec2(0.0f, std::max(160.0f, body_height - 64.0f)), ImGuiChildFlags_Border);
+			ImVec2(0.0f, std::max(narrow ? 180.0f : 160.0f, body_height - 96.0f)), ImGuiChildFlags_Border);
 		int shown = 0;
 		for (const auto& choice : g.modelChoices) {
 			if (!MatchesFilter(choice.name + " " + choice.type, g.welcomeModelQuery))
@@ -2346,7 +2349,7 @@ void RenderWelcome(const ThemePalette& palette) {
 			++shown;
 			ImGui::PushID(choice.path.c_str());
 			if (ImGui::Selectable(choice.name.c_str(), false, ImGuiSelectableFlags_None,
-					ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+					ImVec2(ImGui::GetContentRegionAvail().x, kRow))) {
 				OpenModelAt(choice.path);
 				ImGui::PopID();
 				break;
@@ -2361,7 +2364,8 @@ void RenderWelcome(const ThemePalette& palette) {
 		ImGui::PopStyleVar(2);
 		if (!g.modelChoicesError.empty())
 			ImGui::TextColored(palette.error, "%s", g.modelChoicesError.c_str());
-		if (ImGui::Button(L("Shell.ChooseModelsFolder", "Choose Models Folder..."), ImVec2(0.0f, 24.0f))) {
+		if (ImGui::Button(L("Shell.ChooseModelsFolder", "Choose Models Folder..."),
+				ImVec2(-1.0f, kRow))) {
 			SystemDialogs::OpenFolderDialog([](std::filesystem::path folder) {
 				if (folder.empty())
 					return;
@@ -2370,14 +2374,15 @@ void RenderWelcome(const ThemePalette& palette) {
 				LoadModelChoices();
 			});
 		}
+	};
 
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Dummy(ImVec2(0.0f, 2.0f));
+	auto renderStart = [&]() {
+		ImGui::Dummy(ImVec2(0.0f, narrow ? 10.0f : 2.0f));
 		ImGui::TextDisabled("%s", L("Shell.Start", "Start"));
 		auto link = [&](const char* label, const std::string& command) {
 			ImGui::PushStyleColor(ImGuiCol_Text, palette.link);
 			if (ImGui::Selectable(label, false, ImGuiSelectableFlags_None,
-					ImVec2(ImGui::GetContentRegionAvail().x - 4.0f, 0.0f)))
+					ImVec2(ImGui::GetContentRegionAvail().x - 4.0f, kRow)))
 				ExecuteCommand(command);
 			ImGui::PopStyleColor();
 		};
@@ -2389,6 +2394,23 @@ void RenderWelcome(const ThemePalette& palette) {
 		ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 		ImGui::TextWrapped("%s", g.workspace.empty() ? "(none)" : g.workspace.c_str());
 		ImGui::PopTextWrapPos();
+	};
+
+	if (ImGui::BeginTable("##welcome_columns", narrow ? 1 : 2,
+			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings)) {
+		ImGui::TableSetupColumn("Models", ImGuiTableColumnFlags_WidthStretch, narrow ? 1.0f : 0.58f);
+		if (!narrow)
+			ImGui::TableSetupColumn("Start", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		renderModels();
+		if (narrow) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+		} else {
+			ImGui::TableSetColumnIndex(1);
+		}
+		renderStart();
 		ImGui::EndTable();
 	}
 }

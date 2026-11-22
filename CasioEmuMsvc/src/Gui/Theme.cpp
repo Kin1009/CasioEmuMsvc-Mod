@@ -5,6 +5,7 @@
 #include "Markdown.hpp"
 #include "ModelInfo.h"
 #include "Models.h"
+#include "Plugin/PluginRegistry.h"
 #include "Settings/Settings.h"
 #include "Shell/Shell.h"
 #include "Shell/SessionHost.h"
@@ -908,6 +909,24 @@ private:
 
 	// ---------------------------------------------------------------- plugins
 	void RenderPlugins(ThemeManager& tm, casioemu::settings::SettingsData& data) {
+		// The script/data-only plugin manager lives HERE, in Settings > Plugins.
+		// The old text pointed users at a session tool that the shell deliberately
+		// hides (ToolWindows() filters "Plugin Manager"), so the entry was a dead
+		// end. Every button below is a 44 pt touch target for iPadOS.
+		ToolUi::Section("Script plugins (data-only)");
+		{
+			ToolUi::PanelScope panel("##settings_plugin_scripts");
+#ifdef CASIOEMU_IPADOS
+			ToolUi::Status("iPadOS loads data-only plugins from <app>/Plugins at startup; native code and JIT are unavailable.",
+				UIHelpers::kColorWarning);
+#else
+			ToolUi::Hint("Data-only script plugins are portable; native plugins run in-process on desktop builds.");
+#endif
+			if (ImGui::Button("Install data-only .plugin...", ImVec2(-1.0f, 44.0f)))
+				casioemu::shell::RequestInstallPlugin();
+			ToolUi::Hint("Packages are copied into the app's plugins folder and appear in the list below after a reload.");
+		}
+
 		ToolUi::Section("Theme plugin");
 		{
 			ToolUi::PanelScope panel("##settings_plugin_theme");
@@ -918,20 +937,56 @@ private:
 			ImGui::Text("Active preset: %s", tm.CurrentThemeName().empty() ? "(none)" : tm.CurrentThemeName().c_str());
 		}
 
-		ToolUi::Section("Registry");
+		ToolUi::Section("Installed plugins");
 		{
 			ToolUi::PanelScope panel("##settings_plugin_registry");
-			ImGui::Text("Enabled plugins: %d", static_cast<int>(data.plugins.enabled.size()));
-			ImGui::Text("Disabled plugins: %d", static_cast<int>(data.plugins.disabled.size()));
-			ImGui::TextWrapped("Trust store: %s", data.plugins.trustPath.c_str());
+			auto& registry = casioemu::plugin::PluginRegistry::Instance();
+			const auto& entries = registry.Entries();
+			size_t enabled = 0, disabled = 0;
+			for (const auto& entry : entries) {
+				if (entry.removed) continue;
+				if (entry.enabled) ++enabled; else ++disabled;
+			}
+			ImGui::Text("Enabled: %zu  Disabled: %zu  Trust store: %s",
+				enabled, disabled, data.plugins.trustPath.c_str());
 			ImGui::Spacing();
-			if (ImGui::Button("Install Plugin..."))
-				casioemu::shell::RequestInstallPlugin();
-			ToolUi::Hint("Open the Plugin Manager from a session tab.");
+			if (entries.empty()) {
+				ToolUi::EmptyState("No plugins installed. Bundled data-only plugins appear here on startup.");
+			} else {
+				for (const auto& entry : entries) {
+					if (entry.removed) continue;
+					ImGui::PushID(entry.Id().c_str());
+					ToolUi::PanelScope card("##settings_plugin_card");
+					ImGui::TextUnformatted(entry.Name().empty() ? entry.Id().c_str() : entry.Name().c_str());
+					ImGui::TextDisabled("%s %s - %s", entry.Id().c_str(),
+						entry.Version().c_str(), entry.state.c_str());
+					if (!entry.error.empty())
+						ImGui::TextColored(ToolUi::Palette().error, "%s", entry.error.c_str());
+					ImGui::Spacing();
+					if (ImGui::Button(entry.enabled ? "Disable" : "Enable", ImVec2(140.0f, 44.0f)))
+						registry.SetEnabled(entry.Id(), !entry.enabled);
+					ImGui::SameLine();
+					ImGui::TextDisabled("%s", entry.IsNative() ? "native (desktop only)" : "data-only");
+					ImGui::PopID();
+				}
+			}
+			ImGui::Spacing();
+			if (ImGui::Button("Reload plugins", ImVec2(-1.0f, 44.0f))) {
+				registry.Reload();
+				registry.ReloadDeclarative();
+			}
+			if (ImGui::Button("Open full Plugin Manager", ImVec2(-1.0f, 44.0f))) {
+				for (auto* win : windows) {
+					if (win && win->name && std::strcmp(win->name, "Plugin Manager") == 0) {
+						win->BringToFront();
+						break;
+					}
+				}
+			}
 		}
 
 		ToolUi::Section("Safety");
-		ToolUi::Hint("Native plugins run in-process; review permissions.");
+		ToolUi::Hint("Review permissions before enabling an imported package; native plugins cannot run on iPadOS.");
 	}
 
 	// ----------------------------------------------------------- integrations

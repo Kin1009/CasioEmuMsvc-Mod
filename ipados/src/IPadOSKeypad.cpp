@@ -74,34 +74,49 @@ void SetVisible(bool visible) { g_visible = visible; }
 bool IsVisible() { return g_visible; }
 
 void Render() {
-    if (!g_visible)
-        return;
-
     float safe_l = 0, safe_t = 0, safe_r = 0, safe_b = 0;
     GetSafeAreaInsets(safe_l, safe_t, safe_r, safe_b);
-
     const ImVec2 display = ImGui::GetIO().DisplaySize;
+
+    if (!g_visible) {
+        // iPadOS has no native menu bar: hiding the keypad must never strand the
+        // user with no way to bring it back. Synced from the Mac port's
+        // uncommitted "##iPad Keypad Restore" fix, with a 44 pt touch target.
+        ImGui::SetNextWindowPos(
+            ImVec2(display.x - safe_r - 132.0f, display.y - safe_b - 60.0f),
+            ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(124.0f, 52.0f), ImGuiCond_Always);
+        ImGui::Begin("##iPad Keypad Restore", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking);
+        if (ImGui::Button("Keypad", ImVec2(-1.0f, 44.0f)))
+            g_visible = true;
+        ImGui::End();
+        return;
+    }
+
     const float width = 430.0f;
     ImGui::SetNextWindowPos(
         ImVec2(display.x - width - safe_r - 12.0f,
-               display.y - safe_b - 292.0f),
+               display.y - safe_b - 318.0f),
         ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(width, 280.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(width, 306.0f), ImGuiCond_Always);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
     ImGui::Begin("iPad Keypad", &g_visible,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking);
-    ImGui::SetWindowFontScale(1.15f);
+    ImGui::SetWindowFontScale(1.1f);
 
     constexpr int columns = 6;
+    constexpr float kTouch = 44.0f; // Apple HIG minimum target
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
     const float button_width = (ImGui::GetContentRegionAvail().x -
                                 spacing * (columns - 1)) / columns;
 
     int index = 0;
     for (const KeyDef& key : kKeys) {
-        if (ImGui::Button(key.label, ImVec2(button_width, 36.0f)))
+        if (ImGui::Button(key.label, ImVec2(button_width, kTouch)))
             PushKey(key.key);
         if ((++index % columns) != 0)
             ImGui::SameLine();
@@ -109,10 +124,10 @@ void Render() {
 
     ImGui::SetWindowFontScale(1.0f);
     ImGui::Spacing();
-    if (ImGui::Button("Settings", ImVec2(120.0f, 34.0f)))
+    if (ImGui::Button("Settings", ImVec2(150.0f, kTouch)))
         casioemu::ipados::OpenSettingsWindow();
     ImGui::SameLine();
-    if (ImGui::Button("Hide keys", ImVec2(120.0f, 34.0f)))
+    if (ImGui::Button("Hide keys", ImVec2(150.0f, kTouch)))
         g_visible = false;
     ImGui::End();
     ImGui::PopStyleVar();

@@ -10,8 +10,10 @@
 #include "Localization.h"
 #include "ModelInfo.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cmath>
+#include <string>
 float screen_fading_blending_coefficient = 0;
 float screen_flashing_brightness_coeff = 1.5f;
 bool screen_residual_enabled = true;
@@ -35,6 +37,42 @@ void HwController::RenderCore() {
 			ImGui::Spacing();
 			ToolUi::Field("Flash map (reference)");
 			casioemu::cg100info::RenderFlashMap();
+
+			// CG100 / SH4 session controls were moved here from the Calculator
+			// panel: that panel is zoom-only, and on iPadOS a full-width 44 pt
+			// button is required for a reliable touch target. These calls patch
+			// REAL core state and reboot; no host-side key press or fake text is
+			// involved. The 1.5 s guard prevents interrupting a diag boot.
+			ImGui::Spacing();
+			ToolUi::Field("Diagnostics & reset (CG100 / SH4)");
+			static std::chrono::steady_clock::time_point last_diag{};
+			static bool diag_armed = false;
+			const bool cooling = diag_armed &&
+				std::chrono::steady_clock::now() - last_diag < std::chrono::milliseconds(1500);
+			if (cooling)
+				ImGui::BeginDisabled();
+			if (ImGui::Button("To diagnostics (SERVICE)", ImVec2(-1.0f, 44.0f))) {
+				last_diag = std::chrono::steady_clock::now();
+				diag_armed = true;
+				m_emu->ArchEnterDiag(0); // factory-blank flash 0x300 -> service menu
+			}
+			const bool svc_hover = ImGui::IsItemHovered();
+			if (ImGui::Button("To diagnostics (FACTORY)", ImVec2(-1.0f, 44.0f))) {
+				last_diag = std::chrono::steady_clock::now();
+				diag_armed = true;
+				m_emu->ArchEnterDiag(1); // in-core boot combo -> DIAGNOSTIC MODE
+			}
+			const bool fac_hover = ImGui::IsItemHovered();
+			if (cooling)
+				ImGui::EndDisabled();
+			if (svc_hover)
+				ImGui::SetTooltip("Patches the factory-blank flash model word (0x300 = FF FF FF FF) and RESETs so the OS boot gate enters SERVICE. No keys, no fake output.");
+			if (fac_hover)
+				ImGui::SetTooltip("Erases the exam marker, RESETs, and holds AC + x10^x + ON inside the core until the OS shows DIAGNOSTIC MODE. No host key presses.");
+			ImGui::Spacing();
+			if (ImGui::Button("Reboot (physical RESET)", ImVec2(-1.0f, 44.0f)))
+				m_emu->ArchReboot();
+			ToolUi::Hint("Actions reboot the calculator; allow ~1.5 s before triggering another diag mode.");
 		}
 	}
 

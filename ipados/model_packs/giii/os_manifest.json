@@ -1,0 +1,111 @@
+{
+  "schema": 2,
+  "package": "PKG9860 fx-9860GIII",
+  "generated_from": "/mnt/code/extracted/OS_IMAGES/MANIFEST.sha256 (OSEXTRACT) + independent raw-DEFLATE decode verified 2026-11-22",
+  "caveat": "Two GIII OS blobs now decode cleanly into genuine 3.71 OS images (CASIOWIN + version markers verified). They are NOT boot-tested, and no proven bootcode file exists (installers cannot supply bootcode). RCDATA 3072 and aux 3069 still fail to decode and are kept only as raw encoded resources. NO OS BOOT IS CLAIMED.",
+  "installer": {
+    "file": "20_2_fx-9860g3_G35_series_update_371_2b.zip",
+    "version": "3.71",
+    "url": "https://www.casio.com/content/dam/casio/global/edu-casio-com/download/files/20_2_fx-9860g3_G35_series_update_371_2b.zip",
+    "sha256": "3a1a56d70968f14f4c50b98ea52051c5896fb02d0a5a004844523e6fe76f4322"
+  },
+  "decoding": {
+    "method": "RFC1951 raw DEFLATE from byte 0, wbits=-15, opaque 8-byte trailer (public CG100 prior art)",
+    "reference": "/mnt/code/prior_art/cg100-rom-extract/docs/HOW_IT_WORKS.md section 1; /mnt/code/decrypt/tools/decode_os.py",
+    "importer": "tools/import_decoded_os.py",
+    "independent_verification": "/mnt/code/decrypt/verify_independent.txt; re-derived locally via zlib.decompressobj(-15)"
+  },
+  "provider_naming": {
+    "arch_provider": "sh3.giii.skeleton",
+    "arch_architecture": "sh4a",
+    "explanation": "arch_provider is an OPAQUE host dispatch string, not an ISA claim. This is the ID actually registered by the sibling SH3PLUGIN skeleton; keeping it preserves real dispatch. The 'sh3' token is a legacy project tag that conflicts with the verified SH-4A/SH7305 class.",
+    "rename_plan": "When a real GIII core lands, register an ISA-correct id (suggested: giii.sh4a.core) and change only the arch_provider value in config.json. No host code change is needed."
+  },
+  "artifacts": [
+    {
+      "role": "decoded primary GIII OS 3.71 image (from RCDATA 3070)",
+      "decoded": true,
+      "decode_status": "clean",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os.bin",
+      "source_blob": "g3_3.71_os_image_RCDATA3070_from_win.bin",
+      "source_blob_sha256": "83505bebd77b37ba520f2949d0919727ad38e3b24fa875d3baaf2117d150e5e3",
+      "size": 3866622,
+      "sha256": "fb6f3933f52ee3181f15940ea3c542b381631a31a6517a9582b8db20a506ce31",
+      "trailer": "84ebf7ad00003b00",
+      "markers": {"CASIOWIN": "0xfab6", "version_03.71.0000": "0x1001e"}
+    },
+    {
+      "role": "decoded alternate GIII OS 3.71 image (from RCDATA 3071)",
+      "decoded": true,
+      "decode_status": "clean",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os_3071.bin",
+      "source_blob": "g3_3.71_os_image_RCDATA3071_from_win.bin",
+      "source_blob_sha256": "652310242f36221e655ec1c97ddd50c509033f9fc3a92ca05a117f06e6363987",
+      "size": 3866621,
+      "sha256": "6bf297fddb956456e98da54ce31d800165ab480aca3cba9b89d90b3fce8c97b9",
+      "trailer": "78409a0900003b00",
+      "markers": {"CASIOWIN": "0xfab5", "version_03.71.0000": "0x1001d"}
+    },
+    {
+      "role": "encoded OS update resource (RCDATA 3070) -- provenance, decoded copy above",
+      "decoded": false,
+      "decode_status": "clean",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os_payload/g3_3.71_os_image_RCDATA3070_from_win.bin",
+      "source_path": "/mnt/code/extracted/OS_IMAGES/g3_3.71_os_image_RCDATA3070_from_win.bin",
+      "size": 1975263,
+      "sha256": "83505bebd77b37ba520f2949d0919727ad38e3b24fa875d3baaf2117d150e5e3"
+    },
+    {
+      "role": "encoded OS update resource (RCDATA 3071) -- provenance, decoded copy above",
+      "decoded": false,
+      "decode_status": "clean",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os_payload/g3_3.71_os_image_RCDATA3071_from_win.bin",
+      "source_path": "/mnt/code/extracted/OS_IMAGES/g3_3.71_os_image_RCDATA3071_from_win.bin",
+      "size": 1971158,
+      "sha256": "652310242f36221e655ec1c97ddd50c509033f9fc3a92ca05a117f06e6363987"
+    },
+    {
+      "role": "encoded OS update resource (RCDATA 3072) -- DECODE FAILED, kept only as raw resource",
+      "decoded": false,
+      "decode_status": "failed: invalid distance too far back",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os_payload/g3_3.71_os_image_RCDATA3072_from_win.bin",
+      "source_path": "/mnt/code/extracted/OS_IMAGES/g3_3.71_os_image_RCDATA3072_from_win.bin",
+      "size": 1972655,
+      "sha256": "fca2f0da97eb8d1dd02a620a7eac028f38231b3b75a8e7c90ed7f136793f0c0c"
+    },
+    {
+      "role": "auxiliary encoded resource (RCDATA 3069), role unproven -- DECODE FAILED, NOT bootcode",
+      "decoded": false,
+      "decode_status": "failed: invalid distance too far back",
+      "bootable_flash_image": false,
+      "boot_tested": false,
+      "path": "fx-9860GIII/os_payload/g3_3.71_aux_blob_RCDATA3069_from_win.bin",
+      "source_path": "/mnt/code/extracted/OS_IMAGES/g3_3.71_aux_blob_RCDATA3069_from_win.bin",
+      "size": 40965,
+      "sha256": "46d7852063a19579f632cff89946ccb0b6082f948dfca4cdee16cad0b0c52b29"
+    }
+  ],
+  "wired_into_config": {
+    "flash_path": "os.bin",
+    "flash_path_sha256": "fb6f3933f52ee3181f15940ea3c542b381631a31a6517a9582b8db20a506ce31",
+    "rom_path": "",
+    "note": "Only the cleanly decoded primary image is wired as flash_path. No bootcode is wired."
+  },
+  "pending": [
+    "Obtain a proven bootcode file (not obtainable from installers; needs hardware dump or dumper add-in).",
+    "Actually boot the decoded OS with a real core and demonstrate it (not attempted: provider is a skeleton).",
+    "Decode GIII RCDATA 3072 and aux 3069 (both fail with 'invalid distance too far back'); no data fabricated.",
+    "Rename arch_provider to an ISA-correct id when a real core registers one (see provider_naming).",
+    "Replace the schematic placeholder skin with an authorised real skin."
+  ]
+}

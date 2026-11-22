@@ -462,8 +462,9 @@ if(CASIOEMU_IPADOS)
         "${CMAKE_SOURCE_DIR}/ipados/src/IPadOSBridge.mm"
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
-    # Data-only plugins are compiled into the app bundle at build time.  The
-    # loader scans <bundle>/Resources/Plugins at startup.
+    # Data-only plugins are copied into the app bundle at build time. iOS
+    # bundles have no Resources/ directory: the loader scans <bundle>/Plugins
+    # (bundle root). The UIKit bridge also exports CASIOEMU_IPADOS_PLUGINS_DIR.
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:${TARGET_NAME}>/Plugins"
@@ -501,6 +502,41 @@ if(CASIOEMU_IPADOS)
     set(BUNDLE_RES_DIR "$<TARGET_FILE_DIR:${TARGET_NAME}>")
 else()
     set(BUNDLE_RES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:${TARGET_NAME}>/Resources")
+endif()
+
+# ----------------------------------------------------- iPadOS bundled data
+# The signed .app must be self-contained: sideloaded apps cannot fetch model
+# packs or plugin data at launch. Everything below is DATA ONLY - no native
+# code, no JIT, no dlopen. Source of truth/provenance:
+#   ipados/model_packs/README.md, ipados/script_data/README.md.
+if(CASIOEMU_IPADOS)
+    set(IPADOS_DATA_ROOT "${CMAKE_SOURCE_DIR}/ipados")
+
+    if(IS_DIRECTORY "${IPADOS_DATA_ROOT}/model_packs")
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${BUNDLE_RES_DIR}/models"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_RES_DIR}/models"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${IPADOS_DATA_ROOT}/model_packs" "${BUNDLE_RES_DIR}/models"
+            COMMENT "Bundling data-only model packs into the iPadOS app")
+    endif()
+
+    if(IS_DIRECTORY "${IPADOS_DATA_ROOT}/script_data")
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${BUNDLE_RES_DIR}/script_data"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${IPADOS_DATA_ROOT}/script_data" "${BUNDLE_RES_DIR}/script_data"
+            COMMENT "Bundling script reference data into the iPadOS app")
+    endif()
+
+    # iOS looks for PrivacyInfo.xcprivacy at the bundle root.
+    if(EXISTS "${IPADOS_DATA_ROOT}/PrivacyInfo.xcprivacy")
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${IPADOS_DATA_ROOT}/PrivacyInfo.xcprivacy"
+                "${BUNDLE_RES_DIR}/PrivacyInfo.xcprivacy"
+            COMMENT "Bundling the iPadOS privacy manifest")
+    endif()
 endif()
 
 # ------------------------------------------------------------------ Theme presets

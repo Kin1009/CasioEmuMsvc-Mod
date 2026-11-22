@@ -11,6 +11,12 @@
 
 namespace casioemu::ipados {
 
+/// Called once at startup, before any resource is scanned. Points the model and
+/// data-plugin loaders at the signed app bundle's `models/` and `Plugins/`
+/// directories via environment overrides, so a Stage Manager launch from any
+/// working directory still finds the bundled data.
+void SetBundleResourcePaths();
+
 /// Called once after SDL_CreateWindow(). Configures the SDL UIView for
 /// multitasking / Stage Manager resizing, safe-area layout, trackpad pointer
 /// interactions and hardware-keyboard commands.

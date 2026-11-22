@@ -1,0 +1,169 @@
+{
+  "schema": "casioemu.model-package/1",
+  "package": "fx-CG50",
+  "generated_by": "PKGCG50 make_manifest.py (hashes computed from on-disk bytes)",
+  "generated_utc": "2026-11-22T11:03:59Z",
+  "host": {
+    "port": "/mnt/code/ports/ipados (also mirrored in /mnt/code/ports/ios)",
+    "descriptor_format": "docs/ARCH_DESCRIPTOR_FORMAT.md",
+    "descriptor_header": "CasioEmuMsvc/src/Plugin/ArchDescriptor.h",
+    "smoke_test": "CasioEmuMsvc/tests/arch_descriptor_smoke.cpp",
+    "provider_id_required": "cg50sh4"
+  },
+  "descriptor": {
+    "arch_provider": "cg50sh4",
+    "arch_architecture": "sh4",
+    "arch_fb_width": "396",
+    "arch_fb_height": "224",
+    "arch_cycles_per_second": "118000000",
+    "arch_cabi_prefix": "cg50_",
+    "arch_power_key_row": "0",
+    "arch_power_key_col": "0"
+  },
+  "hardware_facts": {
+    "lcd": "396x224 RGB565 16-bit (384x216 OS usable area)",
+    "source": "/mnt/code/research/SH3RESEARCH.md §§1.1,3.1,4,7",
+    "cpu_clock": "118000000 (FRQCR 0x0F011112 -> Iphi = PLL/2 ~ 117.96 MHz)",
+    "key_matrix": "8 rows x 12 columns; AC/ON at (0,0); 50 physical keys"
+  },
+  "provenance": {
+    "os_installer": {
+      "model": "fx-CG50 / Graph 90+E",
+      "version": "3.81",
+      "url": "https://www.casio.com/content/dam/casio/global/edu-casio-com/download/files/02_2_fx-cg50_G90_series_update_381_2b.zip",
+      "sha256": "efda30c622262b69ba84d6fdd68ae083fed352e680e3431b18e484516bbe464f",
+      "size_bytes": 19449573,
+      "source": "/mnt/code/research/SH3RESEARCH.md §7"
+    },
+    "extraction_report": "/mnt/code/extracted/OSEXTRACT_REPORT.md",
+    "decode_method": "Raw DEFLATE (RFC1951, zlib wbits=-15) starting at byte 0 of the official RCDATA payload, followed by an opaque 8-byte trailer. See decode_images.py and /mnt/code/decrypt/tools/decode_os.py; verified again by verify_package.py.",
+    "os_image": {
+      "path": "models/fx-CG50/rom.bin",
+      "decoded_copy": "decoded/os.bin",
+      "source_blob": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_os_image_RCDATA3070_from_win.bin",
+      "kind": "decoded_os_image",
+      "decoded_flash_image": true,
+      "full_32mib_flash_dump": false,
+      "validation": "CASIOWIN at 0xE98; version 03.81.0000 at 0x20018",
+      "description": "Decoded OS 3.81 image from official CG50 updater RCDATA 3070.",
+      "sha256": "33fbc7d2d56aaa978ff035d85600d44101110581d04529ee77b2c34e00d2caf5",
+      "size_bytes": 11927544
+    },
+    "os_image_alternate": {
+      "path": "decoded/os_alt_3071.bin",
+      "source_blob": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_os_image_RCDATA3071_from_win.bin",
+      "kind": "decoded_os_image",
+      "decoded_flash_image": true,
+      "description": "Decoded alternate model variant (RCDATA 3071; model code 1801F).",
+      "sha256": "9c089b10225425d753b929597dd8cf08642657f6174703127f88903f8a43b41a",
+      "size_bytes": 11927544
+    },
+    "bootcode": {
+      "status": "AVAILABLE",
+      "path": "decoded/boot.bin",
+      "source_blob": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_aux_blob_RCDATA3069_from_win.bin",
+      "sha256": "fde8b95af5d707168505cb683b3e1ef6c530eaffea59fcefc48882610bf7472e",
+      "size_bytes": 67452,
+      "description": "Decoded RCDATA 3069 boot image shipped by the CG50 updater. Byte-identical to the known CG100 bootcode image (shared CG-series boot image); reference: /mnt/code/prior_art/cg100-rom-extract/docs/HASHES.md."
+    },
+    "compressed_sources": {
+      "os_3070": {
+        "path": "os_payload/cg50_3.81_os_image_RCDATA3070_from_win.bin",
+        "source_artifact": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_os_image_RCDATA3070_from_win.bin",
+        "sha256": "76235210239c13fe7349f3b3f4537301b25a4d8f94d705425705377af9043ddb",
+        "size_bytes": 4660006,
+        "note": "Original encoded installer resource; retained as provenance input only."
+      },
+      "os_3071": {
+        "path": "os_payload/cg50_3.81_os_image_RCDATA3071_from_win.bin",
+        "source_artifact": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_os_image_RCDATA3071_from_win.bin",
+        "sha256": "4c73462327f888f3d9d14ab7975c14b78bbfd696728dfa96530a6cf3bbfa965c",
+        "size_bytes": 4660066,
+        "note": "Original encoded installer resource; retained as provenance input only."
+      },
+      "aux_3069": {
+        "path": "os_payload/cg50_3.81_aux_blob_RCDATA3069_from_win.bin",
+        "source_artifact": "/mnt/code/extracted/OS_IMAGES/cg50_3.81_aux_blob_RCDATA3069_from_win.bin",
+        "sha256": "10ec51180b64bd00a9f84ca4946758e22c8e9c268ba1aded09aa105a43819cf4",
+        "size_bytes": 42889,
+        "note": "Original encoded installer resource; decoded to boot.bin."
+      }
+    }
+  },
+  "files": {
+    "models/fx-CG50/config.json": {
+      "sha256": "82a3421c2593b32cfcea38a3420ffad200056de67fcfc21d3be5772151a2cf83",
+      "size_bytes": 1131
+    },
+    "models/fx-CG50/board.svg": {
+      "sha256": "f4dd4baec47c96e5948b708a53dcf9753f898198041816752fc21eaee3ba1f36",
+      "size_bytes": 13564
+    },
+    "models/fx-CG50/face.png": {
+      "sha256": "f0abc138564a77f9c1467555f85eed269743ed5e475e00f1080c03e69dc16437",
+      "size_bytes": 36815
+    },
+    "models/fx-CG50/rom.bin": {
+      "sha256": "33fbc7d2d56aaa978ff035d85600d44101110581d04529ee77b2c34e00d2caf5",
+      "size_bytes": 11927544
+    },
+    "decoded/os.bin": {
+      "sha256": "33fbc7d2d56aaa978ff035d85600d44101110581d04529ee77b2c34e00d2caf5",
+      "size_bytes": 11927544
+    },
+    "decoded/os_alt_3071.bin": {
+      "sha256": "9c089b10225425d753b929597dd8cf08642657f6174703127f88903f8a43b41a",
+      "size_bytes": 11927544
+    },
+    "decoded/boot.bin": {
+      "sha256": "fde8b95af5d707168505cb683b3e1ef6c530eaffea59fcefc48882610bf7472e",
+      "size_bytes": 67452
+    },
+    "os_payload/cg50_3.81_os_image_RCDATA3070_from_win.bin": {
+      "sha256": "76235210239c13fe7349f3b3f4537301b25a4d8f94d705425705377af9043ddb",
+      "size_bytes": 4660006
+    },
+    "os_payload/cg50_3.81_os_image_RCDATA3071_from_win.bin": {
+      "sha256": "4c73462327f888f3d9d14ab7975c14b78bbfd696728dfa96530a6cf3bbfa965c",
+      "size_bytes": 4660066
+    },
+    "os_payload/cg50_3.81_aux_blob_RCDATA3069_from_win.bin": {
+      "sha256": "10ec51180b64bd00a9f84ca4946758e22c8e9c268ba1aded09aa105a43819cf4",
+      "size_bytes": 42889
+    },
+    "fx-CG50.model.zip": {
+      "sha256": "712fce7e82cae89a3e167fece6d1df94653d436f856e504f1ca508a91cbe6894",
+      "size_bytes": 4691797
+    },
+    "keymap.json": {
+      "sha256": "f46359860a26343427be14af4f2638459c3e2ec28ba6ec8277854babe34d50d8",
+      "size_bytes": 10584
+    },
+    "build_assets.py": {
+      "sha256": "842342a47e3e1995b8b20fd128823acad4451b80a6efc26e545a4465edd23f5f",
+      "size_bytes": 10640
+    },
+    "decode_images.py": {
+      "sha256": "4693037ef4e67c283c47b6b88fb8cd126f1ef0da11f43c516cffad980e4d620e",
+      "size_bytes": 3651
+    },
+    "make_manifest.py": {
+      "sha256": "8cdf6da4ec978bb2b67bbe66e742e36bba2100066b5ddebaf7ca30369f38c050",
+      "size_bytes": 9733
+    },
+    "make_online_zip.py": {
+      "sha256": "35a804e266f3539f4e5a76506fb26413810d8f1afb760be40174665bfb28bbbd",
+      "size_bytes": 2392
+    },
+    "verify_package.py": {
+      "sha256": "9ace0da6ebe2b9128749c2f38440e8cfe1caea9fc43ae78e4c6b088004e3a820",
+      "size_bytes": 24270
+    }
+  },
+  "limitations": [
+    "The decoded OS image is a flash prefix, NOT a verified full 32 MiB flash dump; config.flash_path is intentionally empty.",
+    "Decoding the images does not demonstrate that the OS boots; no cg50sh4 core is shipped.",
+    "Bootcode is byte-identical to the CG100 boot image; a CG50-specific boot role is inferred from the updater, not proven on hardware.",
+    "board.svg and face.png are generated reference artwork, not Casio assets."
+  ]
+}

@@ -522,6 +522,10 @@ for (;;) {
 	menu_actions.reset = [] { casioemu::shell::ResetSession(); };
 	casioemu::mac::InstallNativeMenu(menu_actions);
 #ifdef CASIOEMU_IPADOS
+	// Point the model and data-only plugin loaders at the signed bundle's data
+	// before anything scans for files; relative "models"/"Plugins" paths are not
+	// reliable when the app is launched from Files / Stage Manager.
+	casioemu::ipados::SetBundleResourcePaths();
 	// UIKit: resizable scene, safe-area insets, trackpad pointer and keyboard.
 	casioemu::ipados::ConfigureWindow(emulator.window);
 #endif
