@@ -202,11 +202,20 @@ bool IsNumeric(const std::string& value) {
 } // namespace
 
 int CompareSemver(const std::string& lhs, const std::string& rhs) {
+	// Numeric components come from untrusted plugin.json files.  std::stoi
+	// throws std::out_of_range for huge digit runs, so clamp instead.
+	const auto number = [](const std::string& component) -> int {
+		if (component.empty() || !IsNumeric(component))
+			return 0;
+		if (component.size() > 9)
+			return 2147483647; // INT_MAX
+		return std::stoi(component);
+	};
 	const auto left = SplitSemver(lhs);
 	const auto right = SplitSemver(rhs);
 	for (size_t i = 0; i < 3; ++i) {
-		const int a = i < left.size() && IsNumeric(left[i]) ? std::stoi(left[i]) : 0;
-		const int b = i < right.size() && IsNumeric(right[i]) ? std::stoi(right[i]) : 0;
+		const int a = i < left.size() ? number(left[i]) : 0;
+		const int b = i < right.size() ? number(right[i]) : 0;
 		if (a != b)
 			return a < b ? -1 : 1;
 	}

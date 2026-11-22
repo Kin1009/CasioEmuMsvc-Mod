@@ -165,6 +165,16 @@ public:
 
 	void Tick() override {
 		m_cpu.run(kCyclesPerSlice);
+		if (m_diagComboCycles) {
+			if (m_diagComboCycles <= kCyclesPerSlice) {
+				m_diagComboCycles = 0;
+				m_bus.keysc().releaseAll();
+				m_status = "DIAGNOSTIC MODE";
+			}
+			else {
+				m_diagComboCycles -= kCyclesPerSlice;
+			}
+		}
 		RefreshFramebuffer();
 	}
 
@@ -238,6 +248,49 @@ public:
 
 	void ReleaseAll() override { m_bus.keysc().releaseAll(); }
 	const char* GetStatusText() const override { return m_status.c_str(); }
+
+	// Physical RESET: true CPU reset to the reset vector, no snapshot restore.
+	void Reboot() {
+		m_diagComboCycles = 0;
+		Reset();
+	}
+
+	// Genuine OS diag entry by configuring calculator state and rebooting; the
+	// OS itself enters diag on the next boot.  mode 0 blanks the factory marker
+	// at flash 0x300..303 (SERVICE menu); mode 1 erases the exam marker and
+	// holds the real boot key combo in-core until the dialog has been rendered.
+	void EnterDiag(int mode) {
+		auto& flash = m_bus.memory().flash;
+		if (flash.empty()) {
+			m_status = "diag: no flash image";
+			return;
+		}
+		const auto blank = [this, &flash](uint32_t address) {
+			if (address < flash.size())
+				flash[address] = 0xFF;
+			if (address < m_flash.size())
+				m_flash[address] = 0xFF;
+		};
+		if (mode == 0) {
+			for (uint32_t a = 0x300; a <= 0x303; ++a)
+				blank(a);
+		}
+		else {
+			blank(0xB20002u); // Exam ON suppresses the boot diag key gate
+			blank(0xB20003u);
+		}
+		Reset();
+		if (mode == 0) {
+			m_status = "SERVICE diag (factory blank) - booting...";
+		}
+		else {
+			m_bus.keysc().press(0, 0);  // AC
+			m_bus.keysc().press(4, 1);  // x10^x
+			m_bus.keysc().press(6, 9);  // ON
+			m_diagComboCycles = 275000000ull; // ~550 slices at 200 MIPS
+			m_status = "FACTORY diag combo held - booting...";
+		}
+	}
 
 	// ---- bridge helpers (not part of IEmulatorCore) ------------------------
 	void KeyMatrix(int row, int col) {
@@ -365,6 +418,7 @@ private:
 	std::string m_flashPath;
 	std::string m_lastError;
 	std::string m_status{"idle"};
+	uint64_t m_diagComboCycles{0}; // auto-release countdown for factory diag
 };
 
 // ---- Provider --------------------------------------------------------------
@@ -436,6 +490,15 @@ extern "C" SH4_EXPORT void casioemu_arch_core_key_up(void* core, int row, int co
 
 extern "C" SH4_EXPORT void casioemu_arch_core_release_all(void* core) {
 	if (core) static_cast<Sh4Core*>(core)->Bus().keysc().releaseAll();
+}
+
+extern "C" SH4_EXPORT void casioemu_arch_core_reboot(void* core) {
+	if (core) static_cast<Sh4Core*>(core)->Reboot();
+}
+
+// Configure flash/boot state and reset so the OS enters its own diagnostics.
+extern "C" SH4_EXPORT void casioemu_arch_core_enter_diag(void* core, int mode) {
+	if (core) static_cast<Sh4Core*>(core)->EnterDiag(mode);
 }
 
 extern "C" SH4_EXPORT void casioemu_arch_core_power_on(void* core) {

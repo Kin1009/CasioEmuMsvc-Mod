@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <vector>
 #if defined(__ANDROID__)
 #include <SDL.h>  // SDL_AndroidGetExternalStoragePath() / JNI helpers
@@ -266,13 +267,31 @@ namespace {
 		return unique;
 	}
 
+	// Values in load_order.txt come from installed plugin APK metadata; only
+	// plain file names are accepted (no traversal / absolute paths).
+	bool IsSafePluginFileName(const std::string& name) {
+		return !name.empty() && name != "." && name != ".." &&
+			name.find('/') == std::string::npos &&
+			name.find('\\') == std::string::npos &&
+			name.find("..") == std::string::npos;
+	}
+
 	// Collect both ZIP packages (.plugin) and already-extracted Android shared
-	// libraries (.so).  A load_order.txt from the legacy Java plugin bridge is
-	// honoured as an extra source of plain .so names.
+	// libraries (.so).  load_order.txt entries are seeded FIRST so dependency
+	// order from the legacy Java bridge is preserved through de-duplication.
 	std::vector<std::filesystem::path> FindAndroidPluginModules() {
 		std::vector<std::filesystem::path> result;
 		for (const auto& dir : AndroidPluginSearchDirs()) {
 			std::error_code ec;
+			std::ifstream order(dir / "load_order.txt");
+			std::string line;
+			while (std::getline(order, line)) {
+				if (!IsSafePluginFileName(line))
+					continue;
+				const std::filesystem::path candidate = dir / line;
+				if (std::filesystem::is_regular_file(candidate, ec))
+					result.push_back(candidate);
+			}
 			const bool isNativeLibraryDir =
 				(std::getenv("CASIOEMU_NATIVE_LIBRARY_DIR") &&
 				 dir == std::filesystem::path(std::getenv("CASIOEMU_NATIVE_LIBRARY_DIR")));
@@ -291,15 +310,6 @@ namespace {
 						continue;
 				}
 				result.push_back(entry.path());
-			}
-			std::ifstream order(dir / "load_order.txt");
-			std::string line;
-			while (std::getline(order, line)) {
-				if (line.empty())
-					continue;
-				std::filesystem::path candidate = dir / line;
-				if (std::filesystem::is_regular_file(candidate, ec))
-					result.push_back(candidate);
 			}
 		}
 		std::vector<std::filesystem::path> unique;
@@ -408,6 +418,41 @@ void LoadPlugins() {
 #include <string>
 
 namespace {
+	// FindClass() on SDL's attached native thread uses the system class loader
+	// and normally fails, leaving a pending NoClassDefFoundError.  Calling any
+	// other JNI function before clearing it is undefined behaviour, so prefer
+	// the SDL activity's own class and always clear pending exceptions.
+	jclass AndroidGameClass(JNIEnv* env) {
+		jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+		jclass cls = activity ? env->GetObjectClass(activity) : nullptr;
+		if (env->ExceptionCheck())
+			env->ExceptionClear();
+		if (!cls) {
+			cls = env->FindClass("com/tele/u8emulator/Game");
+			if (env->ExceptionCheck()) {
+				env->ExceptionClear();
+				return nullptr;
+			}
+		}
+		return cls;
+	}
+
+	void EnsureAndroidPluginAssets(JNIEnv* env) {
+		static bool extracted = false;
+		if (extracted || !env)
+			return;
+		extracted = true;
+		jclass cls = AndroidGameClass(env);
+		if (!cls)
+			return;
+		jmethodID method = env->GetStaticMethodID(cls, "checkAndExtractPluginAssets", "()V");
+		if (method)
+			env->CallStaticVoidMethod(cls, method);
+		if (env->ExceptionCheck())
+			env->ExceptionClear();
+		env->DeleteLocalRef(cls);
+	}
+
 	// The Java activity stores its app-private paths in static fields instead
 	// of using android.system.Os.setenv() (a hidden platform API).  Publish
 	// them into the native process environment here.
@@ -415,14 +460,7 @@ namespace {
 		JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
 		if (!env)
 			return {};
-		jclass cls = env->FindClass("com/tele/u8emulator/Game");
-		if (!cls) {
-			// A native thread without a Java frame may not find the app class
-			// by name; the SDL activity's class is an equivalent fallback.
-			jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
-			if (activity)
-				cls = env->GetObjectClass(activity);
-		}
+		jclass cls = AndroidGameClass(env);
 		if (!cls)
 			return {};
 		jmethodID id = env->GetStaticMethodID(cls, method, "()Ljava/lang/String;");
@@ -445,6 +483,8 @@ namespace {
 	}
 
 	void PublishAndroidEnvironment() {
+		// Extraction populates the static fields that the getters below read.
+		EnsureAndroidPluginAssets(static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv()));
 		struct Entry { const char* method; const char* variable; };
 		static const Entry entries[] = {
 			{"getCacheDirPath", "TMPDIR"},
@@ -477,6 +517,10 @@ namespace {
 		const auto cacheDir = AndroidPluginCacheDir();
 		std::error_code ec;
 		std::filesystem::create_directories(cacheDir, ec);
+		// The same native library may be reachable both as a .plugin asset and
+		// as a legacy extracted .so.  De-duplicate by content so fPluginLoad is
+		// never called twice for one plugin.
+		std::set<std::string> loadedHashes;
 
 		for (const auto& package : FindAndroidPluginModules()) {
 			std::string error;
@@ -486,6 +530,10 @@ namespace {
 					(error.empty() ? std::string(" (no native library)") : ": " + error) + "\n";
 				continue;
 			}
+			std::string digest, hashError;
+			if (casioemu::plugin::ComputeFileSha256(module, digest, hashError) &&
+				!loadedHashes.insert(digest).second)
+				continue;
 			const std::string key = ArchitectureModuleKey(module);
 			auto& state = AndroidModules()[key];
 			if (!state.handle) {
@@ -529,21 +577,12 @@ namespace {
 
 void LoadPlugins() {
 	g_PluginLoadLog += "[INFO] Starting Android Plugin Loader\n";
+	// PublishAndroidEnvironment() also runs the one-time Java asset extraction.
 	PublishAndroidEnvironment();
 	JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
 	if (!env) {
 		g_PluginLoadLog += "[FATAL] Failed to get JNIEnv\n";
 		return;
-	}
-
-	// The Java activity extracts packaged .plugin ZIPs and plugin APK libraries
-	// into app-private storage; their paths were published above through JNI.
-	jclass gameClass = env->FindClass("com/tele/u8emulator/Game");
-	if (gameClass) {
-		jmethodID method = env->GetStaticMethodID(gameClass, "checkAndExtractPluginAssets", "()V");
-		if (method)
-			env->CallStaticVoidMethod(gameClass, method);
-		env->DeleteLocalRef(gameClass);
 	}
 	LoadAndroidPluginModules(false);
 }

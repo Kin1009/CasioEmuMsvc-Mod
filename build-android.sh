@@ -32,11 +32,13 @@ native() {
 
 GRADLE_NDK_ARG="-Pandroid.ndkPath=$NDK"
 
+plugin() { "$ROOT/plugins/cg100-sh4/build-android.sh"; }
+
 case "$MODE" in
     native) native ;;
-    apk)    cd "$ROOT" && ./gradlew :app:assembleDebug "$GRADLE_NDK_ARG" ;;
-    aab)    cd "$ROOT" && ./gradlew :app:bundleDebug "$GRADLE_NDK_ARG" ;;
-    plugin) "$ROOT/plugins/cg100-sh4/build-android.sh" ;;
-    all)    native && cd "$ROOT" && ./gradlew :app:assembleDebug "$GRADLE_NDK_ARG" ;;
+    apk)    plugin && cd "$ROOT" && ./gradlew :app:assembleDebug "$GRADLE_NDK_ARG" ;;
+    aab)    plugin && cd "$ROOT" && ./gradlew :app:bundleDebug "$GRADLE_NDK_ARG" ;;
+    plugin) plugin ;;
+    all)    native && plugin && cd "$ROOT" && ./gradlew :app:assembleDebug "$GRADLE_NDK_ARG" ;;
     *) echo "Usage: $0 {native|apk|aab|plugin|all}" >&2; exit 2 ;;
 esac

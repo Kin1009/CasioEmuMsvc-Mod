@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permissive filter: the CG100 USB simulation is host-driven, so no
+     specific vendor/product IDs are required to receive attach events. -->
+<resources>
+    <usb-device />
+</resources>

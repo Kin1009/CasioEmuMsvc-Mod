@@ -22,8 +22,17 @@ import zipfile
 from pathlib import Path
 
 
+def platform_tag(abi: str) -> str:
+    return {
+        "arm64-v8a": "arm64-android",
+        "armeabi-v7a": "any",
+        "x86_64": "x64",
+        "x86": "x32",
+    }.get(abi, "any")
+
+
 def manifest(abi: str, native: str) -> dict:
-    tag = "arm64-android" if abi == "arm64-v8a" else "any"
+    tag = platform_tag(abi)
     return {
         "schema": 1,
         "id": "com.casioemu.arch.cg100sh4",
@@ -35,7 +44,7 @@ def manifest(abi: str, native: str) -> dict:
             f"built for Android {abi} ({tag})."
         ),
         "min_host": "2.1.0",
-        "platforms": ["android", f"android-{tag}"],
+        "platforms": ["android", "any" if tag == "any" else f"android-{tag}"],
         "type": "tool",
         "permissions": ["ui.shell"],
         "entry_point": "assets/info.json",
@@ -61,15 +70,24 @@ def main() -> None:
         "native_entry": native_name,
     }
 
+    def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes, mode: int) -> None:
+        # PluginPackage.cpp rejects entries without S_IFREG/S_ISDIR mode bits.
+        # Python's writestr(name, str) sets only 0o600 and no file-type bit,
+        # which would make the host refuse to extract this package.
+        entry = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+        entry.compress_type = zipfile.ZIP_DEFLATED
+        entry.external_attr = (stat.S_IFREG | mode) << 16
+        entry.create_system = 3  # Unix: mode bits are honoured by the extractor
+        archive.writestr(entry, data)
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.out, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "plugin.json", json.dumps(manifest(args.abi, native_name), indent=2) + "\n"
-        )
-        archive.writestr("assets/info.json", json.dumps(info, indent=2) + "\n")
-        entry = zipfile.ZipInfo(native_name)
-        entry.external_attr = (stat.S_IFREG | 0o755) << 16
-        archive.writestr(entry, so.read_bytes())
+        add_bytes(archive, "plugin.json",
+                  (json.dumps(manifest(args.abi, native_name), indent=2) + "\n").encode("utf-8"),
+                  0o644)
+        add_bytes(archive, "assets/info.json",
+                  (json.dumps(info, indent=2) + "\n").encode("utf-8"), 0o644)
+        add_bytes(archive, native_name, so.read_bytes(), 0o755)
     print(f"wrote {args.out}")
 
 

@@ -26,11 +26,13 @@ cmake -S "$HERE" -B "$BUILD_DIR" -G Ninja \
 echo "[2/3] build CG100NativeSH4"
 cmake --build "$BUILD_DIR" --target CG100NativeSH4 -- -j"${CASIO_BUILD_JOBS:-4}"
 
-if [ "$ABI" = "arm64-v8a" ]; then
-    TAG="arm64-android"
-else
-    TAG="any"
-fi
+case "$ABI" in
+    arm64-v8a)   TAG="arm64-android" ;;
+    armeabi-v7a) TAG="any" ;;
+    x86_64)      TAG="x64" ;;
+    x86)         TAG="x32" ;;
+    *)           TAG="any" ;;
+esac
 SO="$HERE/artifacts/android/$ABI/libcg100sh4-android-$TAG.so"
 if [ ! -f "$SO" ]; then
     echo "expected plugin library missing: $SO" >&2

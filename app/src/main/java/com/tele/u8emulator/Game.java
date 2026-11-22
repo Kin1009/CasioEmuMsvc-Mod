@@ -489,14 +489,11 @@ public class Game extends SDLActivity {
                     Object v = metaData.get("casioemu.plugin.version");
                     if (v != null) pVer = v.toString();
                     pDesc = metaData.getString("casioemu.plugin.desc", pDesc);
-                    String initClassName = metaData.getString("casioemu.plugin.init_class");
-                    if (initClassName != null && !initClassName.isEmpty()) {
-                        Context pluginContext = activity.createPackageContext(appInfo.packageName, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
-                        ClassLoader pluginLoader = pluginContext.getClassLoader();
-                        Class<?> initClass = pluginLoader.loadClass(initClassName);
-                        java.lang.reflect.Method initMethod = initClass.getMethod("init", Context.class, Context.class, String.class);
-                        initMethod.invoke(null, activity, pluginContext, activity.getCacheDir().getAbsolutePath());
-                    }
+                    // Deliberately do NOT honour casioemu.plugin.init_class:
+                    // loading code from an arbitrary installed APK with
+                    // CONTEXT_IGNORE_SECURITY would let any app execute inside
+                    // this process.  Native plugins are loaded from the
+                    // app-private .plugin assets / jniLibs instead.
                     String deps = metaData.getString("casioemu.plugin.dependencies");
                     if (deps != null && !deps.isEmpty()) {
                         for (String dep : deps.split(",")) loadOrder.add(dep.trim());
@@ -522,6 +519,7 @@ public class Game extends SDLActivity {
             }
         }
 
+        legacyPluginsDir = pluginsDir.getAbsolutePath();
         try {
             FileOutputStream fos = new FileOutputStream(loadOrderFile);
             for (String so : loadOrder) {
@@ -531,7 +529,6 @@ public class Game extends SDLActivity {
             FileOutputStream fosInfo = new FileOutputStream(infoFile);
             fosInfo.write(infoBuilder.toString().getBytes());
             fosInfo.close();
-            legacyPluginsDir = pluginsDir.getAbsolutePath();
         } catch (Exception e) {
             Log.e(TAG, "Failed to write plugin load order", e);
         }
@@ -541,6 +538,8 @@ public class Game extends SDLActivity {
         // (e.g. my-plugin-android-arm64-android.so).  Copy them into filesDir
         // so dlopen() can map them from a stable, writable-free location.
         File packageDir = new File(activity.getFilesDir(), "plugins");
+        pluginPackagesDir = packageDir.getAbsolutePath();
+        appNativeLibraryDir = activity.getApplicationInfo().nativeLibraryDir;
         try {
             if (!packageDir.exists() && !packageDir.mkdirs()) {
                 throw new IOException("cannot create " + packageDir);
@@ -579,8 +578,6 @@ public class Game extends SDLActivity {
                 }
                 activity.writeTextFile(versionFile, version);
             }
-            pluginPackagesDir = packageDir.getAbsolutePath();
-            appNativeLibraryDir = activity.getApplicationInfo().nativeLibraryDir;
         } catch (Exception e) {
             Log.e(TAG, "Failed to extract packaged plugins: " + e.getMessage());
         }

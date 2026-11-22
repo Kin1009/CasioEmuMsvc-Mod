@@ -56,8 +56,8 @@ android {
             minifyEnabled false
         }
         release {
-            // Unsigned by default; pass -PcasioStoreFile/-PcasioStorePassword
-            // etc. for a signed release build.
+            // Unsigned by default. Add a signingConfigs.release block with
+            // your own keystore (never commit one) before shipping a release.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

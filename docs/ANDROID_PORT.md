@@ -90,7 +90,7 @@ Equivalent Gradle commands:
 
 ```sh
 ./gradlew :app:assembleDebug
-./gradlew :app:bundleRelease
+./gradlew :app:bundleDebug
 ```
 
 `app/build.gradle` uses AGP's `externalNativeBuild` with the repository CMake
@@ -158,6 +158,8 @@ Selection order in the native loader: exact `android-<arch>` tag →
   `cacheDir/plugins_so/`, with `load_order.txt` (legacy bridge).
 * Prebuilt Gradle libraries: `app/src/main/jniLibs/arm64-v8a/*plugin*.so`
   are installed in `nativeLibraryDir`.
+* The legacy `casioemu.plugin.init_class` hook (loading code from an arbitrary
+  installed APK with `CONTEXT_IGNORE_SECURITY`) is deliberately not executed.
 * The Java activity stores those paths in static fields; native code reads
   them with `JNIEnv::CallStaticObjectMethod` and publishes them with the
   POSIX `setenv()` (`CASIOEMU_PLUGIN_PACKAGES_DIR`, `CASIOEMU_PLUGINS_DIR`,
@@ -179,7 +181,7 @@ writable app directories, ship the `.so` in `jniLibs` instead.
 ## 5. CG100 SH4 plugin
 
 The source is vendored in `plugins/cg100-sh4/` (from
-`/Volumes/Code/casio-tools/cg100-sh4-cpp`). It is self-contained C++17 — no
+`/Volumes/Code/casio-tools/cg100-sh4-cpp`). It is self-contained C++20 — no
 macOS frameworks, no Go dylib, no IOKit/CoreFoundation calls. The only
 Darwin-specific linker flag (`-undefined dynamic_lookup`) is confined to the
 `APPLE` branch; Android uses `dlsym(RTLD_DEFAULT, ...)` for the optional SDL
@@ -267,6 +269,10 @@ libmain.so  (CMake target "main", SDL_main in src/casioemu.cpp)
   macros are single-escaped valid C string literals.
 * Sentry/Crashpad, discord-rpc, the MCP plugin and plugin self-tests are disabled
   on Android.
+* The Wiz/CWiz core is compiled into the Android library because the debugger UI
+  references `wiz::cwmode`, but its data/examples are not packaged into the APK
+  (`CASIOEMU_WIZ_DATA_DIR` points at a build-machine path). Wiz/CWiz windows are
+  therefore non-functional on a device; normal emulator use is unaffected.
 * Some pre-existing absolute host paths remain in unrelated source files
   (Wiz docs path, plugin-test fixture root); they are not used by Android.
 * 32-bit ARM / x86 Android ABIs are configured but not built or tested here.
