@@ -218,6 +218,14 @@ else()
     message(STATUS "Web build: skipping AsmJit; the browser target uses the interpreter")
 endif()
 
+# Sentry is optional: a fresh source checkout may not include the sentry-native
+# submodule/overlay.  Auto-disable with a warning instead of failing configure
+# with an obscure "add_subdirectory given source dir does not exist" error.
+if(CASIOEMU_ENABLE_SENTRY AND NOT EXISTS "${CMAKE_SOURCE_DIR}/sentry-native/CMakeLists.txt")
+    message(WARNING "CASIOEMU_ENABLE_SENTRY=ON but sentry-native/ is missing — disabling Sentry")
+    set(CASIOEMU_ENABLE_SENTRY OFF CACHE BOOL "Build the bundled Sentry/Crashpad crash reporter" FORCE)
+endif()
+
 if(CASIOEMU_ENABLE_SENTRY AND NOT ANDROID AND NOT IOS AND NOT CASIOEMU_WEB)
     set(SENTRY_BUILD_SHARED_LIBS OFF CACHE BOOL "Disable Sentry shared lib" FORCE)
     set(SENTRY_BUILD_RUNTIMESTATIC ${BUILD_EXECUTABLE} CACHE BOOL "Static runtime for Sentry (MSVC /MT)" FORCE)
