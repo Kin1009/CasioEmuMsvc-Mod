@@ -1093,17 +1093,6 @@ void CodeViewer::RenderArchTabs() {
 	using namespace casioemu::cg100info;
 	const Info info = Read();
 
-	// Headless verification hook: pick an inner tab once, inert in normal use.
-	static bool tab_env_applied = false;
-	if (!tab_env_applied) {
-		tab_env_applied = true;
-		if (const char* requested = std::getenv("CASIOEMU_CODE_TAB")) {
-			const int index = std::atoi(requested);
-			if (index >= 0 && index <= 5)
-				arch_tab = index;
-		}
-	}
-
 	ToolUi::Section("CG100 / SH4 debug session");
 	char headline[256];
 	std::snprintf(headline, sizeof(headline), "%s  |  %s  |  %s",
@@ -1119,7 +1108,6 @@ void CodeViewer::RenderArchTabs() {
 		return;
 
 	if (ImGui::BeginTabItem("Disassembly")) {
-		arch_tab = 0;
 		uint8_t bytes[128] = {};
 		const char* source = Cg100ReadFlash(arch_flash_addr, bytes, static_cast<int>(sizeof(bytes)));
 		ToolUi::Description("No SH4 decoder is compiled into this host build. The legacy nX/U8 "
@@ -1140,7 +1128,6 @@ void CodeViewer::RenderArchTabs() {
 	}
 
 	if (ImGui::BeginTabItem("Memory")) {
-		arch_tab = 1;
 		uint8_t bytes[128] = {};
 		const char* source = Cg100ReadFlash(arch_flash_addr, bytes, static_cast<int>(sizeof(bytes)));
 		ToolUi::Description("Byte view of the emulated flash. Live RAM/MMIO reads are not "
@@ -1160,7 +1147,6 @@ void CodeViewer::RenderArchTabs() {
 	}
 
 	if (ImGui::BeginTabItem("Registers")) {
-		arch_tab = 2;
 		ToolUi::Section("Unavailable in this build");
 		ToolUi::Description("IEmulatorCore exposes only identity, status, keys and framebuffer - "
 			"there is no SH4 register query API (PC / SP / GBR / SR / MAC / PR). The casioctl "
@@ -1170,7 +1156,6 @@ void CodeViewer::RenderArchTabs() {
 	}
 
 	if (ImGui::BeginTabItem("Breakpoints")) {
-		arch_tab = 3;
 		ToolUi::Section("Not supported by the SH4 core");
 		ToolUi::Description("The architecture-core ABI has no breakpoint export. The legacy "
 			"breakpoint map belongs to the built-in nX/eps CPU and is inert for CG100, so it is "
@@ -1179,7 +1164,6 @@ void CodeViewer::RenderArchTabs() {
 	}
 
 	if (ImGui::BeginTabItem("Call stack")) {
-		arch_tab = 4;
 		ToolUi::Section("No call frames");
 		ToolUi::Description("The call-analysis hooks are fired by the built-in nX/t4x CPU only; "
 			"they never run for a plugin architecture core. There are no frames to display.");
@@ -1187,7 +1171,6 @@ void CodeViewer::RenderArchTabs() {
 	}
 
 	if (ImGui::BeginTabItem("Core")) {
-		arch_tab = 5;
 		ToolUi::Section("Live core counters");
 		ImGui::TextDisabled("Provider core"); ImGui::SameLine(160.0f);
 		ImGui::TextUnformatted(info.core_id ? info.core_id : "unavailable");

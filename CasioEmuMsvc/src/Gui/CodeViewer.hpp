@@ -49,7 +49,6 @@ private:
 	// CG100 / architecture-core inner tab set (hosted by the Code Viewer dock).
 	// These are only used when casioemu::cg100info::IsActive() is true; the
 	// legacy disassembly view below is untouched for built-in chipsets.
-	int arch_tab = 0;                          // active inner tab index
 	uint32_t arch_flash_addr = 0x00020000u;    // last browsed flash address
 
 	// Search related
