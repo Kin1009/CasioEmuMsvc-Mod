@@ -109,6 +109,41 @@ host.log('bytecode_pcall_err=' .. tostring(res))
 		"rejection is an ordinary Lua error, not a VM escape");
 }
 
+// Escape 3: the allocator used to charge nsize-osize on allocation (where
+// osize is a Lua type tag for fresh blocks) and subtract the full size on
+// free, wrapping the unsigned counter to ~2^64 after enough churn.
+void TestMemoryAccounting() {
+	std::cout << "== regression: allocator accounting underflow ==\n";
+	const std::string churn = R"(
+local sink = 0
+for i = 1, 120000 do
+  local t = { i, "s" .. i, { x = i }, { i, i + 1 } }
+  sink = sink + #t
+end
+host.log('churn ' .. sink)
+)";
+	std::vector<std::string> logs;
+	ScriptRuntime runtime = MakeRuntime(&logs, 200000000ull);
+	std::string error;
+	Check(runtime.Load(churn, "churn.lua", error), "allocation-churn script runs");
+	Check(runtime.MemoryUsed() <= kDefaultScriptMemoryLimit,
+		"MemoryUsed stays within cap after churn (no unsigned wrap)");
+	std::string error2;
+	Check(runtime.Load(churn, "churn.lua", error2), "repeated churn runs");
+	Check(runtime.MemoryUsed() <= kDefaultScriptMemoryLimit,
+		"MemoryUsed still within cap after repeated churn");
+
+	// The cap itself must still be an OOM error rather than a wrapped counter.
+	ScriptRuntime hog = MakeRuntime(nullptr, 200000000ull);
+	const std::string overCap = R"(local s = string.rep('x', 20 * 1024 * 1024) host.log(#s))";
+	std::string hogError;
+	Check(!hog.Load(overCap, "hog.lua", hogError) &&
+		hogError.find("not enough memory") != std::string::npos,
+		"over-cap allocation rejected with OOM");
+	Check(hog.MemoryUsed() <= kDefaultScriptMemoryLimit,
+		"over-cap attempt leaves accounting within cap");
+}
+
 // Guard against collateral damage to the documented script API.
 void TestLegitFeatures() {
 	std::cout << "== positive: legitimate script API ==\n";
@@ -141,6 +176,7 @@ function on_unload() host.log('unload') end
 int main() {
 	TestCloseEscape();
 	TestBytecodeEscape();
+	TestMemoryAccounting();
 	TestLegitFeatures();
 	std::cout << (g_failures == 0 ? "RESULT: PASS" : "RESULT: FAIL")
 		<< " (" << (g_checks - g_failures) << "/" << g_checks << ")\n";
