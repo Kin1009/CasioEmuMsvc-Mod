@@ -216,6 +216,7 @@ inline const ImWchar* GetMemoryGlyphRanges() {
 		0x0370, 0x03FF, // Greek
 		0x2000, 0x206F, // general punctuation
 		0x2070, 0x209F, // super/subscripts
+		0x02B0, 0x02FF, // Spacing Modifier Letters (ˣ U+02E3, ˆ U+02C6)
 		0x2100, 0x214F, // letterlike symbols
 		0x2190, 0x21FF, // arrows
 		0x2200, 0x22FF, // mathematical operators
