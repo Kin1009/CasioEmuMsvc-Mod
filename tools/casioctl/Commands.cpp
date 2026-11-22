@@ -368,8 +368,8 @@ namespace casioctl {
 		};
 
 		if (command == "status" || command == "pause" || command == "resume" || command == "reset" ||
-			command == "regs" || command == "hello" || command == "bt" || command == "vars" ||
-			command == "step-over" || command == "step-out" || command == "shutdown") {
+			command == "regs" || command == "hello" || command == "model" || command == "bt" ||
+			command == "vars" || command == "step-over" || command == "step-out" || command == "shutdown") {
 			if (!expect(1, command.c_str()))
 				return false;
 			parsed.command = command == "step-over" ? "step.over"
@@ -1130,6 +1130,25 @@ namespace casioctl {
 			}
 			return out.str();
 		}
+		if (command == "model") {
+			auto field = [&](const char* key) -> std::string {
+				const Json* value = result.Find(key);
+				if (!value)
+					return std::string("-");
+				if (value->IsString())
+					return value->AsString();
+				if (value->IsBool())
+					return value->AsBool() ? "yes" : "no";
+				return std::to_string(value->AsInt(0));
+			};
+			out << "model      " << field("model") << "\n";
+			out << "hardware   " << field("hardware") << " (id " << field("hardware_id") << ")\n";
+			out << "path       " << field("model_path") << "\n";
+			out << "rom        " << field("rom_path") << "\n";
+			out << "pid        " << field("pid") << "\n";
+			out << "protocol   " << field("protocol") << " v" << field("protocol_version") << "\n";
+			return out.str();
+		}
 		if (command == "status")
 			return FormatStatus(result);
 		if (command == "pause" || command == "resume" || command == "reset") {
@@ -1593,6 +1612,7 @@ namespace casioctl {
 			"  snapshot export <path> [id] [--subtree] | snapshot import <path>\n"
 			"Protocol:\n"
 			"  hello                            protocol/capability handshake\n"
+			"  model                            model/hardware identity (no debugger needed)\n"
 			"  shutdown                         leave the main loop and exit the emulator\n"
 			"  help                             this list\n"
 			"  quit | exit                      leave the REPL\n"

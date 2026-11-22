@@ -81,9 +81,21 @@ namespace casioctl {
 		const char* override_dir = std::getenv("CASIOEMU_CTL_DIR");
 		if (override_dir && *override_dir)
 			return override_dir;
+#if defined(__APPLE__)
 		const char* home = std::getenv("HOME");
 		const std::string base = (home && *home) ? std::string(home) : std::string(".");
 		return base + "/Library/Application Support/" + kAppName + "/ctl";
+#else
+		// Linux/other POSIX: prefer the short XDG runtime path. AF_UNIX socket
+		// paths are capped at ~108 bytes; a long HOME otherwise makes the
+		// server silently fail to bind (CtlServer.cpp checks the path length).
+		const char* runtime = std::getenv("XDG_RUNTIME_DIR");
+		if (runtime && *runtime)
+			return std::string(runtime) + "/" + kAppName + "/ctl";
+		const char* home = std::getenv("HOME");
+		const std::string base = (home && *home) ? std::string(home) : std::string(".");
+		return base + "/.local/share/" + kAppName + "/ctl";
+#endif
 	}
 
 	std::string ScratchRoot() {

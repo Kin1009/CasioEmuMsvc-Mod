@@ -17,6 +17,14 @@ namespace casioctl {
 				fd = -1;
 			}
 		}
+
+		// macOS/BSD set SO_NOSIGPIPE in Connect(); Linux needs MSG_NOSIGNAL
+		// on each send() to avoid dying when the emulator closes the socket.
+#ifdef MSG_NOSIGNAL
+		constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+		constexpr int kSendFlags = 0;
+#endif
 	} // namespace
 
 	Client::~Client() {
@@ -96,7 +104,7 @@ namespace casioctl {
 			data.push_back('\n');
 		size_t offset = 0;
 		while (offset < data.size()) {
-			const ssize_t sent = ::send(fd_, data.data() + offset, data.size() - offset, 0);
+			const ssize_t sent = ::send(fd_, data.data() + offset, data.size() - offset, kSendFlags);
 			if (sent > 0) {
 				offset += static_cast<size_t>(sent);
 				continue;
