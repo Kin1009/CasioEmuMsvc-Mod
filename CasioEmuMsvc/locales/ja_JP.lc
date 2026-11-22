@@ -433,4 +433,6 @@ StartupUI.OpenReleasePage=リリースページを開く
 StartupUI.UpdateLater=後で
 StartupUI.UpdateDismissToday=今日はもう通知しない
 
+Shell.AllModels=All models
+Tool.CG100Controls=CG100 Controls
 placeholder2=a)"

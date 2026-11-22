@@ -10,6 +10,7 @@ namespace casioemu
 	MMURegion::MMURegion()
 	{
 		setup_done = false;
+		emulator = nullptr;
 	}
 
 	MMURegion::~MMURegion()
@@ -37,6 +38,16 @@ namespace casioemu
 
 	void MMURegion::Kill()
 	{
+		// Board models skip chipset.Setup(), so some MMURegions are never
+		// registered and `emulator` stays null. Teardown calls Kill() from
+		// Chipset::DestructPeripherals / DestructClockGenerator /
+		// DestructInterruptSFR as well as ~MMURegion(). Stay a no-op when the
+		// region was never set up, and stay idempotent for double teardown.
+		if (!setup_done || !emulator)
+		{
+			setup_done = false;
+			return;
+		}
 		emulator->chipset.mmu.UnregisterRegion(this);
 		setup_done = false;
 	}
