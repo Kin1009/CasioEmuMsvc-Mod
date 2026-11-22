@@ -429,3 +429,14 @@ app/src/main/assets/
 /build-ui1/
 /build-ui2/
 /build-ui3/
+
+# Local build/verification artifacts (not source)
+/build-*/
+/build-linux/
+/build-pi-verify/
+/.arch-review/
+/.CPU.cpp.orig
+/lua_config_convert/lua-5.4.8/src/liblua.a
+/lua_config_convert/lua-5.4.8/src/lua
+/lua_config_convert/lua-5.4.8/src/luac
+/CasioEmuMsvc/third_party/asmjit-src/
