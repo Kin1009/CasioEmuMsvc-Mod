@@ -540,8 +540,11 @@ namespace {
 				const std::string path = module.string();
 				state.handle = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL);
 				if (!state.handle) {
+					// dlerror() clears the error on the first call; calling it
+					// twice would hand std::string a nullptr on failure.
+					const char* error = dlerror();
 					g_PluginLoadLog += "[ANDROID] dlopen failed for " + path + ": " +
-						std::string(dlerror() ? dlerror() : "unknown error") + "\n";
+						std::string(error ? error : "unknown error") + "\n";
 					continue;
 				}
 				__android_log_print(ANDROID_LOG_INFO, "CasioEmuPlugin", "loaded %s", path.c_str());
