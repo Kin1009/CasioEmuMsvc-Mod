@@ -146,13 +146,7 @@ public:
 	}
 
 	void Reset() override {
-		DestroyTexture();
-		m_cpu.reset();
-		m_cpu.setIps(kIps);
-		m_bus.keysc().releaseAll();
-		m_bus.keysc().setScanPeriod(22000000ull); // ~33 Hz at 200 MIPS
-		m_rgba.assign(static_cast<size_t>(FB_W) * FB_H * 4, 0);
-		m_status = "reset (cold)";
+		ColdReset();
 		// A verified save-state can be dropped in to skip the first-run wizard.
 		if (const char* statePath = std::getenv("CG100_STATE"); statePath && *statePath) {
 			const auto blob = ReadFile(statePath);
@@ -252,7 +246,7 @@ public:
 	// Physical RESET: true CPU reset to the reset vector, no snapshot restore.
 	void Reboot() {
 		m_diagComboCycles = 0;
-		Reset();
+		ColdReset();
 	}
 
 	// Genuine OS diag entry by configuring calculator state and rebooting; the
@@ -279,7 +273,7 @@ public:
 			blank(0xB20002u); // Exam ON suppresses the boot diag key gate
 			blank(0xB20003u);
 		}
-		Reset();
+		ColdReset();
 		if (mode == 0) {
 			m_status = "SERVICE diag (factory blank) - booting...";
 		}
@@ -355,6 +349,19 @@ public:
 	cg100::Bus& Bus() { return m_bus; }
 
 private:
+	// True CPU/hardware reset without the optional CG100_STATE save restore.
+	// Used by the physical RESET bridge and diag entry so they cannot silently
+	// boot a snapshot instead of the configured flash image.
+	void ColdReset() {
+		DestroyTexture();
+		m_cpu.reset();
+		m_cpu.setIps(kIps);
+		m_bus.keysc().releaseAll();
+		m_bus.keysc().setScanPeriod(22000000ull); // ~33 Hz at 200 MIPS
+		m_rgba.assign(static_cast<size_t>(FB_W) * FB_H * 4, 0);
+		m_status = "reset (cold)";
+	}
+
 	template <class T>
 	static void appendPod(std::vector<uint8_t>& out, const T& value) {
 		const uint8_t* p = reinterpret_cast<const uint8_t*>(&value);

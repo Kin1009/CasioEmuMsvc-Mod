@@ -207,9 +207,13 @@ int CompareSemver(const std::string& lhs, const std::string& rhs) {
 	const auto number = [](const std::string& component) -> int {
 		if (component.empty() || !IsNumeric(component))
 			return 0;
-		if (component.size() > 9)
+		const std::size_t first = component.find_first_not_of('0');
+		if (first == std::string::npos)
+			return 0;
+		const std::string digits = component.substr(first);
+		if (digits.size() > 9)
 			return 2147483647; // INT_MAX
-		return std::stoi(component);
+		return std::stoi(digits);
 	};
 	const auto left = SplitSemver(lhs);
 	const auto right = SplitSemver(rhs);
@@ -317,7 +321,8 @@ ManifestResult ParseManifest(const std::string& jsonText) {
 		// The Android port ships packages with "android" (and optionally the
 		// platform-tag-qualified "android-arm64-android") in this field.
 		if (platform != "macos" && platform != "linux" && platform != "windows" &&
-			platform != "android" && platform != "android-arm64-android" && platform != "any")
+			platform != "android" && platform != "android-arm64-android" &&
+			platform != "android-x64" && platform != "android-x32" && platform != "any")
 			return Fail("manifest.platform", "unsupported platform '" + platform + "'");
 	}
 	if (manifest.platforms.empty())
