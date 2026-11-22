@@ -419,6 +419,9 @@ namespace casioemu {
 	void Chipset::DestructInterruptSFR() {
 		region_int_pending.Kill();
 		region_int_mask.Kill();
+		delete[] MaskableInterrupts;
+		MaskableInterrupts = nullptr;
+		EffectiveMICount = 0;
 	}
 
 	void Chipset::ConstructClockGenerator() {
