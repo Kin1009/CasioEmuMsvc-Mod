@@ -100,6 +100,10 @@ public:
 	// Re-scans the plugin folders for newly added .plugin packages and adds
 	// them without unloading already-installed plugins.
 	void Reload();
+	// Re-evaluate entries that were marked Invalid because they are legacy
+	// plain-Mach-O .plugin modules loaded by the early architecture pass. Safe
+	// to call before or after Initialize().
+	void ReconcileArchitectureModules();
 	void ReloadDeclarative();
 	void SetEnabled(const std::string& id, bool enabled);
 	void Remove(const std::string& id);
@@ -133,6 +137,7 @@ private:
 	void LoadTrust();
 	void SaveTrust();
 	void ScanDirectory(const std::filesystem::path& directory);
+	bool ApplyLegacyArchitectureEntry(PluginEntry& entry);
 	void AddPackage(const std::filesystem::path& file);
 	void ApplyTrustAndLoad(PluginEntry& entry);
 	void LoadEntry(PluginEntry& entry);

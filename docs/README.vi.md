@@ -189,4 +189,4 @@ git submodule update --init --recursive
 
 - 💬 **Discord**: [discord.gg/NM39VPdJTf](https://discord.gg/NM39VPdJTf)
 - 📧 **Email**: [khoi.nguyenminh100912@gmail.com](mailto:khoi.nguyenminh100912@gmail.com)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/Kin1009/CasioEmuMsvc-Mac/issues)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/Kin1009/CasioEmuMsvc-Mod/issues)

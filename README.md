@@ -10,7 +10,7 @@
 [![Upstream](https://img.shields.io/badge/upstream-stable-8C8C8C?style=flat-square)](https://github.com/telecomadm1145/CasioEmuMsvc/commits/stable)
 [![License](https://img.shields.io/github/license/telecomadm1145/CasioEmuMsvc?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20(universal)-blue?style=flat-square)](#-install)
-[![Releases](https://img.shields.io/github/v/release/Kin1009/CasioEmuMsvc-Mac?style=flat-square)](https://github.com/Kin1009/CasioEmuMsvc-Mac/releases)
+[![Releases](https://img.shields.io/github/v/release/Kin1009/CasioEmuMsvc-Mod?style=flat-square)](https://github.com/Kin1009/CasioEmuMsvc-Mod/releases)
 
 </div>
 
@@ -44,7 +44,7 @@ API — is upstream's work, unchanged apart from the macOS port.
 
 ## 📦 Install
 
-Grab the latest **universal** build from the [releases page](https://github.com/Kin1009/CasioEmuMsvc-Mac/releases):
+Grab the latest **universal** build from the [releases page](https://github.com/Kin1009/CasioEmuMsvc-Mod/releases):
 
 ```
 CasioEmuMsvc-macOS-universal.zip   →  CasioEmuMsvc.app
@@ -157,8 +157,8 @@ The exact gadget ABI (register layout, `printline` / `smallprint` / `line_draw` 
 Requirements: macOS 12+ , Xcode command line tools, CMake ≥ 3.20 and Ninja.
 
 ```bash
-git clone --recurse-submodules https://github.com/Kin1009/CasioEmuMsvc-Mac.git
-cd CasioEmuMsvc-Mac
+git clone --recurse-submodules https://github.com/Kin1009/CasioEmuMsvc-Mod.git
+cd CasioEmuMsvc-Mod
 
 cmake -G Ninja -DCASIOEMU_ENABLE_SENTRY=OFF -DCMAKE_BUILD_TYPE=Release ..
 ninja CasioEmuMsvc
@@ -191,7 +191,7 @@ both architectures and check the result with `lipo -archs`.
 
 ## 💬 Community & contact
 
-- 🐛 **Issues**: [github.com/Kin1009/CasioEmuMsvc-Mac/issues](https://github.com/Kin1009/CasioEmuMsvc-Mac/issues)
+- 🐛 **Issues**: [github.com/Kin1009/CasioEmuMsvc-Mod/issues](https://github.com/Kin1009/CasioEmuMsvc-Mod/issues)
 - 📧 **Email**: [khoi.nguyenminh100912@gmail.com](mailto:khoi.nguyenminh100912@gmail.com)
 - 💬 **Upstream Discord**: [discord.gg/NM39VPdJTf](https://discord.gg/NM39VPdJTf)
 

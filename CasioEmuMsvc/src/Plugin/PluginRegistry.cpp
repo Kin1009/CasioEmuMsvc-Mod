@@ -26,6 +26,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <sstream>
+#include <sys/stat.h>
 #include <system_error>
 
 namespace casioemu::plugin {
@@ -148,6 +149,18 @@ std::vector<std::string> FindEmbeddedDylibs(const std::filesystem::path& root) {
 	}
 	std::sort(result.begin(), result.end());
 	return result;
+}
+
+// miniz does not apply Unix permission bits on extraction. A packaged .plugin
+// installed at runtime is extracted on the registry path (not the arch pass),
+// so make its embedded dylibs mappable here as well. Safe on a warm cache.
+void MakeEmbeddedDylibsExecutable(const std::filesystem::path& root) {
+	for (const auto& relative : FindEmbeddedDylibs(root)) {
+		const std::filesystem::path file = root / relative;
+		struct stat st{};
+		if (::stat(file.c_str(), &st) == 0)
+			::chmod(file.c_str(), static_cast<mode_t>(st.st_mode | 0111));
+	}
 }
 
 std::string TrustReason(const TrustEvaluation& evaluation) {
@@ -291,6 +304,40 @@ void PluginRegistry::ScanDirectory(const std::filesystem::path& directory) {
 	}
 }
 
+bool PluginRegistry::ApplyLegacyArchitectureEntry(PluginEntry& entry) {
+	// A plain Mach-O .plugin is not a ZIP, so ExtractPackage rejects it. When
+	// the early architecture pass has already dlopen'd that exact file, expose
+	// it in the UI as a loaded native module instead of an invalid package.
+	if (entry.package.valid || entry.removed || entry.package.file.empty())
+		return false;
+	if (!::IsArchitectureModuleLoaded(entry.package.file))
+		return false;
+
+	Manifest legacy;
+	legacy.id = "legacy." + entry.package.file.stem().string();
+	legacy.name = entry.package.file.stem().string();
+	legacy.version = "0.0.0";
+	legacy.type = PluginType::Tool;
+	entry.package.valid = true;
+	entry.package.manifest = std::move(legacy);
+	entry.state = "Loaded (arch core)";
+	entry.loaded = true;
+	entry.zipContainer = false;
+	entry.error.clear();
+	LogLine("[INFO] " + entry.package.file.filename().string() +
+		" is a legacy native module already loaded by the architecture pass");
+	return true;
+}
+
+void PluginRegistry::ReconcileArchitectureModules() {
+	if (!m_initialized)
+		return;
+	for (auto& entry : m_entries) {
+		if (!entry.removed && !entry.package.valid)
+			ApplyLegacyArchitectureEntry(entry);
+	}
+}
+
 void PluginRegistry::AddPackage(const std::filesystem::path& file) {
 	LogLine("[INFO] Reading " + file.string());
 	PluginEntry entry;
@@ -302,6 +349,7 @@ void PluginRegistry::AddPackage(const std::filesystem::path& file) {
 		// any embedded dylibs so the UI can display them.
 		entry.zipContainer = true;
 		entry.embeddedDylibs = FindEmbeddedDylibs(entry.package.root);
+		MakeEmbeddedDylibsExecutable(entry.package.root);
 		// Script plugins are data only: reject any native binary in the ZIP
 		// (tagged or not) so iPadOS installs never depend on dlopen.
 		if (entry.package.manifest.type == PluginType::Script && !entry.embeddedDylibs.empty()) {
@@ -316,20 +364,7 @@ void PluginRegistry::AddPackage(const std::filesystem::path& file) {
 		// Backward compatibility: a legacy plain-Mach-O .plugin is dlopen'd by
 		// the early architecture pass, not by the ZIP extractor. Reflect that
 		// in the UI instead of showing the working core as "Invalid".
-		if (::IsArchitectureModuleLoaded(file)) {
-			Manifest legacy;
-			legacy.id = "legacy." + file.stem().string();
-			legacy.name = file.stem().string();
-			legacy.version = "0.0.0";
-			legacy.type = PluginType::Tool;
-			entry.package.valid = true;
-			entry.package.manifest = std::move(legacy);
-			entry.package.file = file;
-			entry.state = "Loaded (arch core)";
-			entry.loaded = true;
-			entry.zipContainer = false;
-			LogLine("[INFO] " + file.filename().string() +
-				" is a legacy native module already loaded by the architecture pass");
+		if (ApplyLegacyArchitectureEntry(entry)) {
 			m_entries.push_back(std::move(entry));
 			return;
 		}
@@ -1288,17 +1323,24 @@ bool PluginRegistry::InstallFromFile(const std::filesystem::path& file, std::str
 	if (ec)
 		return fail("Cannot install plugin: " + ec.message());
 
-	const size_t before = m_entries.size();
 	AddPackage(destination);
-	if (m_entries.size() > before) {
-		PluginEntry& added = m_entries.back();
-		if (added.state == "Invalid" || added.state == "Error") {
-			const std::string message = added.error;
-			// Keep the copied file for inspection, but report the failure.
-			if (error)
-				*error = message;
-			return false;
+	// AddPackage can silently ignore the file (e.g. duplicate plugin id), so
+	// look the entry up by path instead of relying on the vector growing.
+	const PluginEntry* added = nullptr;
+	for (const auto& entry : m_entries) {
+		if (!entry.removed && entry.package.file == destination) {
+			added = &entry;
+			break;
 		}
+	}
+	if (!added)
+		return fail("Installed package was rejected: " + destination.filename().string());
+	if (added->state == "Invalid" || added->state == "Error") {
+		const std::string message = added->error;
+		// Keep the copied file for inspection, but report the failure.
+		if (error)
+			*error = message;
+		return false;
 	}
 	LogLine("[SUCCESS] Installed " + destination.filename().string());
 	if (error)

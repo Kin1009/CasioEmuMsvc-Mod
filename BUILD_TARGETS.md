@@ -13,7 +13,7 @@ Quick start:
 ./build-all.sh --verify-only   # re-check existing artifacts without building
 ```
 
-Logs: `$CASIO_BUILD_LOG_DIR` (default `/Volumes/Code/casio-tools/temp/build-4target-logs`).
+Logs: `$CASIO_BUILD_LOG_DIR` (default `/Volumes/Code/casio-tools/temp/build-4target-logs` on the original macOS host, otherwise `<repo>/build-logs`).
 
 ---
 

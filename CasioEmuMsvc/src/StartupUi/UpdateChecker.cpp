@@ -22,8 +22,8 @@ namespace {
 // The macOS fork publishes its own universal builds as vMAJOR.MINOR.PATCH
 // releases. Do not point at the upstream repository: its stable-<timestamp>
 // auto-builds are not the packages this app installs.
-constexpr const char* kApi = "https://api.github.com/repos/Kin1009/CasioEmuMsvc-Mac/releases?per_page=1";
-constexpr const char* kReleaseBase = "https://github.com/Kin1009/CasioEmuMsvc-Mac/releases/tag/";
+constexpr const char* kApi = "https://api.github.com/repos/Kin1009/CasioEmuMsvc-Mod/releases?per_page=1";
+constexpr const char* kReleaseBase = "https://github.com/Kin1009/CasioEmuMsvc-Mod/releases/tag/";
 constexpr const char* kCachePath = "update-check.json";
 constexpr auto kCacheLifetime = std::chrono::hours(24 * 3);
 constexpr std::size_t kMaxResponseSize = 1024 * 1024;

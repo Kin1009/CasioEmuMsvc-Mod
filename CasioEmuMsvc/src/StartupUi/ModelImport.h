@@ -85,8 +85,12 @@ inline std::vector<std::string> ReadRequiredPlugins(const ModelInfo& model) {
 }
 
 inline bool IsPluginAvailable(const std::string& id) {
+	// "Installed" is not enough: an entry with a failed native load (bad ABI,
+	// missing embedded dylib, blocked by trust) cannot serve a model that
+	// requires it, so treat it as missing as well.
 	for (const auto& entry : casioemu::plugin::PluginRegistry::Instance().Entries()) {
-		if (entry.Id() == id && !entry.removed && entry.enabled)
+		if (entry.Id() == id && !entry.removed && !entry.blocked &&
+			entry.enabled && entry.loaded)
 			return true;
 	}
 	return false;

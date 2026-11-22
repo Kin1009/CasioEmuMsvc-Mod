@@ -4,7 +4,9 @@ This guide explains how to build one `.plugin` file that works on **macOS,
 Linux, Windows and Android**, what goes in the manifest, how the host picks the
 right native binary, and what ABI the native code must implement.
 
-Tool: `tools/build_plugin.py` (Python 3, standard library only).
+Tool: `tools/build_plugin.py` (Python 3, standard library only). It also exports
+the shared helpers used by `tools/build_universal_plugin.py`, which assembles
+one universal CG100 package from the four platform builds.
 Worked example: `docs/examples/build_hello.sh` + `docs/examples/dummy/`.
 
 ---
@@ -57,17 +59,17 @@ python3 tools/build_plugin.py \
   --binary-os linux   --binary-arch x64           --binary core.so \
   --binary-os windows --binary-arch x64           --binary core.dll \
   --binary-os android --binary-arch arm64-android --binary core-android.so \
-  --out /tmp/hello.plugin
+  --out hello.plugin
 ```
 
-Run `bash docs/examples/build_hello.sh /tmp/hello.plugin` for a self-contained
+Run `bash docs/examples/build_hello.sh <output.plugin>` for a self-contained
 demo using the dummy files in `docs/examples/dummy/` (placeholder text, **not**
-real native libraries).
+real native libraries). Pass an explicit output path outside the source tree.
 
 The tool prints the output SHA-256 and a full entry listing, then re-opens the
 finished ZIP and verifies: ZIP magic, exact entry list, every entry's bytes,
 every entry's Unix mode, and that both JSON documents parse with `schema == 1`.
-Invalid input or a failed verification exits non-zero (nothing is installed).
+Invalid input or a failed verification exits non-zero.
 
 ---
 
@@ -80,10 +82,11 @@ Invalid input or a failed verification exits non-zero (nothing is installed).
 | `--version SEMVER` | Plugin version, `MAJOR.MINOR.PATCH` (optional `-pre` / `+build`). Default `1.0.0`. |
 | `--author TEXT`, `--description TEXT` | Optional metadata (description ≤ 500 chars). Copied into `plugin.json` and `assets/info.json`. |
 | `--min-host SEMVER` | Minimum host version. Default `2.1.0`; current host is `2.2.0` (`kHostVersion` in `src/Plugin/PluginManifest.h`). |
-| `--os-tags a,b,...` | OS tags declared in `platforms`. See §5. |
-| `--arch-tags a,b,...` | Architecture tags, written as advisory `architectures` metadata. See §5. |
+| `--entry-point PATH` | Safe relative entry path. Default `assets/info.json`; `script` plugins must use a path ending in `.lua`. |
+| `--os-tags a,b,...` | OS tags written to `os_tags`. See §5. |
+| `--arch-tags a,b,...` | Arch tags written to `arch_tags`. See §5. |
 | `--permissions a,b,...` | Permission list. See §8. Comma-separated or repeated. |
-| `--type TYPE` | `theme`, `tab`, `inject`, `ui_revamp`, `tool` (default `tool`). |
+| `--type TYPE` | `theme`, `tab`, `inject`, `ui_revamp`, `tool`, `script` (default `tool`). |
 | `--binary PATH` | Native binary to embed (repeatable). Archive name is auto-derived: `<name>-<os>-<arch>.<ext>`. |
 | `--binary-os OS`, `--binary-arch ARCH` | OS/arch for subsequent `--binary` flags. **Sticky** until changed. If omitted, OS is derived from the extension (`.dylib`→macos, `.dll`→windows, `.so`→linux, `.plugin`→macos) and arch defaults to `any` (or the sole declared `--arch-tags` value). |
 | `--asset SRC[=DEST]` | Extra data asset (repeatable). `DEST` defaults to the source basename; must be a safe relative path. |
@@ -93,8 +96,9 @@ Invalid input or a failed verification exits non-zero (nothing is installed).
 | `--out PATH` | Output `.plugin` ZIP (required). Existing file is replaced atomically. |
 
 Validation mirrors the host: unknown permission/tag/type, bad id, bad semver,
-unsafe paths, case-colliding entries, wrong extension, or a `theme`/`inject`
-plugin with native code are all rejected before any ZIP is written.
+unsafe paths, case-colliding entries, wrong extension, native code in a
+`theme`/`inject`/`script` plugin, or iOS/iPadOS tags with native binaries are
+all rejected before any ZIP is written.
 
 ### Per-platform binary commands
 
@@ -109,7 +113,7 @@ plugin with native code are all rejected before any ZIP is written.
 --binary-os windows --binary-arch x64           --binary build/win-x64/core.dll
 # Android 64-bit ARM — note the hyphenated arch tag
 --binary-os android --binary-arch arm64-android --binary build/android-arm64/core.so
-# Universal fallback (matches any host)
+# Universal fallback (lower priority than any concrete tag for a host)
 --binary-os any     --binary-arch any           --binary build/portable/core.so
 ```
 
@@ -130,22 +134,28 @@ Source of truth: `ParseManifest()` in `src/Plugin/PluginManifest.cpp`.
 | `version` | yes | string | semver. |
 | `author`, `description`, `homepage` | no | string | description ≤ 500 chars. |
 | `min_host` | no | string | semver; host rejects a value newer than its own `2.2.0`. |
-| `platforms` | no | array of OS tags | Defaults to `["macos"]` when absent; the updated host accepts all tags in §5. Builder writes it when `--os-tags` is given. |
-| `architectures` | no | array of arch tags | Builder-generated advisory metadata for tooling. **The host selects binaries by filename tags, not by this field.** |
-| `type` | yes | string | One of the five types below. |
+| `platforms` | no | array of OS tags | Legacy field; defaults to `["macos"]`. The builder omits it for portability with strict mobile parsers. |
+| `os_tags` | no | array of OS tags | **Additive field the host actually reads** to mark a platform-tagged native package (`HasPlatformTaggedBinaries`). |
+| `arch_tags` | no | array of arch tags | Same, for CPU architectures. Filename tags decide selection; these mark the package as tagged. |
+| `type` | yes | string | One of the six types below. |
 | `permissions` | no | array of strings | No duplicates; all names must be known (§8). |
-| `entry_point` | yes | string | Safe relative path; use `assets/info.json`. |
-| `native_entry` | conditional | string | **Required** for `tab` and `tool`. **Forbidden** for `theme` and `inject`. Only used as a legacy fallback when the package contains no tagged binaries. |
+| `entry_point` | yes | string | Safe relative path; normally `assets/info.json`. `script` plugins require a `.lua` path. |
+| `native_entry` | conditional | string | `tab`/`tool` need this **or** platform tags. Forbidden for `theme`/`inject`/`script`. Ignored when tagged binaries are found. |
 | `assets` | no | array of strings | Safe relative paths; normally just `["assets/info.json"]`. |
-| `api_version` | no | int | Host accepts `1..3` (`kPluginHostApiMinVersion..kPluginHostApiVersion` in `src/Plugin/PluginVersion.h`); builder relies on the default. |
+| `api_version` | no | int | Host accepts `1..3` (`src/Plugin/PluginVersion.h`); builder relies on the default. |
+| `script_engine`, `script_api`, `script_budget` | script only | string/int | `script_engine` must be `lua54`; `script_api` 1..1; `script_budget` 1..200000000. |
 
-Plugin types: `theme` (data and appearance only, no native code), `tab` (adds a native tab),
-`inject` (payloads, no native code), `ui_revamp` (theme + layout), `tool`
-(native tool / architecture core). `native_entry` points at the first embedded
-binary when the builder makes a `tab` or `tool`; it is ignored whenever tagged
-binaries are present.
+Plugin types:
 
-Generated example (from the demo, trimmed for readability):
+* `theme` — data/appearance only, **no native code**;
+* `inject` — payloads, **no native code**;
+* `tab` — adds a native tab;
+* `ui_revamp` — theme + layout;
+* `tool` — native tool / architecture core;
+* `script` — data-only Lua plugin (no native code); the only type that can
+  legitimately declare `ios` / `ipados` tags.
+
+Generated example (from the demo, with `script`-irrelevant fields shown):
 
 ```json
 {
@@ -156,8 +166,8 @@ Generated example (from the demo, trimmed for readability):
   "type": "tool",
   "permissions": ["ui.shell"],
   "entry_point": "assets/info.json",
-  "platforms": ["macos", "linux", "windows", "android"],
-  "architectures": ["x64", "arm64", "arm64-android"],
+  "os_tags": ["macos", "linux", "windows", "android"],
+  "arch_tags": ["x64", "arm64", "arm64-android"],
   "native_entry": "hello-macos-x64.dylib"
 }
 ```
@@ -168,9 +178,10 @@ Generated example (from the demo, trimmed for readability):
 
 ## 5. OS and architecture tags
 
-Authoritative source: `src/Plugin/PlatformTags.h`.
+Authoritative source: `src/Plugin/PlatformTags.h` (`kKnownOsTags`,
+`kKnownArchTags`).
 
-### OS tags (`kKnownOsTags`)
+### OS tags
 
 | Tag | Meaning |
 |---|---|
@@ -178,20 +189,22 @@ Authoritative source: `src/Plugin/PlatformTags.h`.
 | `linux` | Linux |
 | `windows` | Microsoft Windows |
 | `android` | Android |
+| `ipados` | Apple iPadOS — script plugins only (no native code) |
+| `ios` | Apple iOS — script plugins only (no native code) |
 | `any` | Any OS — wildcard |
 
-### Architecture tags (`kKnownArchTags`)
+### Architecture tags
 
 | Tag | Meaning |
 |---|---|
 | `x64` | 64-bit x86 (AMD64 / Intel64) |
-| `x32` | 32-bit x86 (IA-32) — note: the old draft name `x6432` is **not** valid |
+| `x32` | 32-bit x86 (IA-32) — the old draft name `x6432` is **not** valid |
 | `arm64` | 64-bit ARM on laptops/desktops (Apple Silicon, Windows on ARM, Linux aarch64) |
 | `arm64-android` | 64-bit ARM on Android phones / tablets |
 | `any` | Any CPU architecture — wildcard |
 
-`any` is a wildcard **on either side**: a binary tagged `any-any` matches every
-build, and a build whose own tag is `any` accepts any binary.
+`any` is a wildcard **on either side**. Do not ship `ios`/`ipados` tags on a
+package with native binaries — those platforms run data-only script plugins.
 
 ---
 
@@ -211,12 +224,15 @@ my-plugin-any-any.so
 Notes:
 
 * The `-<os>-<arch>` suffix must be at the **end of the filename stem**; the
-  base name before it must be non-empty. This is what
-  `ParseTaggedNativeFileName()` in `PlatformTags.h` checks.
+  base name before it must be non-empty. See `ParseTaggedNativeFileName()` in
+  `PlatformTags.h`.
 * `arm64-android` contains a hyphen; the parser matches known suffixes rather
   than splitting on `-`, so do not "fix" that name.
-* **Several binaries per platform are allowed** — use distinct base names
-  (`my-plugin1`, `my-plugin2`, …). Every matching binary is loaded.
+* Several binaries per platform are allowed — use distinct base names
+  (`my-plugin1`, `my-plugin2`, …). All binaries tied at the best tier load.
+* Because selection is ranked (§7), an `any-*` fallback shipped next to a
+  concrete binary is **ignored** on hosts with a concrete match — it is safe,
+  but redundant. Do not rely on it to add a second module on such hosts.
 * A binary with **no** tag suffix (e.g. the legacy `CG100SH4.plugin`) is *not*
   a tagged binary; it is only considered through the manifest's `native_entry`.
 
@@ -234,21 +250,31 @@ cannot parse.
 1. For each regular file, parse `-<os>-<arch>` from the filename (and confirm a
    native extension).
 2. Record its `<os>-<arch>` key in the "available" list.
-3. If OS and arch match the running build (`any` wildcards included), add the
-   file to "matched" (all matches load, sorted by path).
-4. Result:
+3. Compute a rank with `PlatformMatchRank()` (higher is better; `-1` = no match):
+
+   | Rank | Tier | Example |
+   |---|---|---|
+   | 4 | exact OS + exact arch | `hello-macos-x64.dylib` on `macos-x64` |
+   | 3 | exact OS + arch `any` | `hello-macos-any.dylib` on `macos-x64` |
+   | 2 | OS `any` + exact arch | `hello-any-x64.so` on `macos-x64` |
+   | 1 | OS `any` + arch `any` | `hello-any-any.so` on any host |
+
+4. Keep **only** binaries in the single highest-ranked tier that matched
+   (`matchedRanks` / `bestRank`); several binaries tied at that tier all load.
+   This prevents a wildcard fallback from being dlopened alongside a concrete
+   binary (which could double-register `fPluginLoad` / `fPluginLoadArch`).
+5. Result:
    * **`NoTaggedBinaries`** — no tagged files at all → fall back to
      `native_entry` (legacy single-dylib packages).
-   * **`Matched`** — one or more files match → load **all** of them.
+   * **`Matched`** — one or more files match → load the best tier only.
    * **`NoMatch`** — tagged files exist but none match → reject the plugin with
      `NoCompatibleBinaryError()`, e.g. **`No native binary for macos-x64`**.
 
-The current build's OS/arch come from `CASIOEMU_PLATFORM_OS` /
-`CASIOEMU_PLATFORM_ARCH`. If the build system does not override them, the header
-derives them from compiler predefines (`__APPLE__` → `macos`, `_WIN32` →
-`windows`, `__ANDROID__` → `android`, `__linux__` → `linux`; `__aarch64__` →
-`arm64`, `__x86_64__` → `x64`, `__i386__` → `x32`, Android ARM64 →
-`arm64-android`).
+The current build's OS/arch come from compiler predefines (the header discards
+any injected `CASIOEMU_PLATFORM_OS` / `CASIOEMU_PLATFORM_ARCH` macros):
+`__APPLE__` → `macos`, `_WIN32` → `windows`, `__ANDROID__` → `android`,
+`__linux__` → `linux`; `__aarch64__` → `arm64`, `__x86_64__` → `x64`,
+`__i386__` → `x32`, Android ARM64 → `arm64-android`.
 
 ---
 
@@ -281,7 +307,8 @@ permission facade (`src/Plugin/PluginApi_Impl.cpp`); a denial is recorded with
 `plugin.permission` and shown as "limited" in the plugin manager.
 
 Declare the **narrowest** set that works — permissions are shown to the user at
-install time.
+install time. Note that the universal CG100 package declares only `ui.shell`
+because the `arch` permission is unknown to stricter mobile parsers.
 
 ### 8.1 Script plugin host API (`type: "script"`, `script_api: 1`)
 
@@ -342,6 +369,9 @@ architecture-provider registration entry point, not part of this table.
   `lib/libcig100core.dylib`. Use `--lib /path/to/libcig100core.dylib`.
 * Keep the dylib's install name relative (`@rpath/...` or `@loader_path/...`);
   an absolute path would make the host look outside the extracted package.
+* Windows DLL dependencies are an exception: they must be at the ZIP **root**
+  (see `tools/build_universal_plugin.py`) because the Windows loader searches
+  the loaded DLL's directory, not `root/lib`.
 
 ---
 
@@ -351,7 +381,7 @@ architecture-provider registration entry point, not part of this table.
 python3 tools/build_plugin.py --preset cg100-sh4 \
   --core /path/to/CG100SH4.plugin \
   --lib  /path/to/libcig100core.dylib \
-  --out  /tmp/CG100SH4.plugin
+  --out CG100SH4.plugin
 ```
 
 The preset fixes the manifest to the known-good values (id
@@ -359,12 +389,13 @@ The preset fixes the manifest to the known-good values (id
 `native_entry: "CG100SH4.plugin"`, `platforms: ["macos"]`), writes the same
 `assets/info.json`, and embeds the dependency as `lib/libcig100core.dylib`.
 `--core` / `--lib` default to the app bundle's plugins directory relative to
-this checkout. Verified: rebuilding from the known-good embedded binaries
-reproduces the bundled ZIP **byte-for-byte** (SHA-256
+this checkout. Rebuilding from the known-good embedded binaries reproduces the
+bundled ZIP byte-for-byte (SHA-256
 `7479bf1841f3622d46e591e15a453cdb20944c72dbeda9670cf4d38ca90c9356`).
 
 The original CG100-specific helper, `tools/make_bundled_plugin.py`, is left
-untouched; the new tool is a superset.
+untouched; `build_plugin.py` is a superset and shares its helpers with
+`tools/build_universal_plugin.py`.
 
 ---
 
@@ -390,24 +421,26 @@ untouched; the new tool is a superset.
 |---|---|
 | `not a readable zip archive` / bad magic | The file is a raw dylib, not a ZIP. Use this builder; native binaries go **inside** the ZIP. |
 | `No native binary for macos-x64` | No tagged binary matches this build. Ship a matching `<name>-<os>-<arch>.<ext>` (or an `any-any` fallback), or fix a typo such as `x6432` → `x32`. |
-| `only the 'macos' platform is supported` | The running host predates multi-platform tags. Update the host (≥ 2.2.0 with `PlatformTags.h`). |
-| Plugin loads but `dlopen` fails for a dependency | Dependency dylib is not in `lib/` or uses an absolute install name. Put it in `lib/` with `--lib` and use `@rpath`/`@loader_path`. |
+| `only the 'macos' platform is supported` | An older/stricter host parser. Use the updated host, or omit `platforms` (the builder does) and declare `os_tags`/`arch_tags`. |
+| Plugin loads but `dlopen` fails for a dependency | Dependency dylib is not in `lib/` or uses an absolute install name. Put it in `lib/` with `--lib` and use `@rpath`/`@loader_path`. On Windows put DLLs at the ZIP root. |
 | `permission denied: ... requires the '<capability>' capability` | Add the permission that grants it (§8), e.g. `arch` for architecture registration, `ui.shell` for tabs/UI. |
 | `unsafe zip entry` / `case-colliding zip entry` | Rename the entry: no absolute paths, `..`, backslashes, duplicates or case-only differences. |
-| `type 'tool' requires native_entry` / `theme plugins cannot include native code` | Match the type to the payload: native code needs `tab`/`tool`; `theme`/`inject` must have none. |
+| `type 'tool' requires native_entry or platform-tagged native binaries` | Pass `--binary`, or declare `--os-tags` / `--arch-tags` for a tagged package. |
+| `theme plugins cannot include native code` | Match the type to the payload: native code needs `tab`/`tool`; `theme`/`inject`/`script` must have none. |
 | `unsupported schema version` | Manifest must have `"schema": 1`. |
 | `plugin requires host X or newer` | Lower `min_host` or update the host. |
+| Both a concrete binary and a fallback load | Not possible with the current ranked selector: only the best tier loads. Remove redundant `any-*` binaries if you relied on them. |
 | Dylib fails to load after install | Check ZIP mode bits are 0755 (`unzip -l` / `python3 -m zipfile -l`); the builder adds them automatically. |
 
 ### Inspect a built package
 
 ```bash
-python3 -m zipfile -l /tmp/hello.plugin
+python3 -m zipfile -l hello.plugin
 python3 - <<'PY'
 import zipfile, json
-with zipfile.ZipFile('/tmp/hello.plugin') as z:
+with zipfile.ZipFile('hello.plugin') as z:
     m = json.loads(z.read('plugin.json'))
-    print(m['id'], m['type'], m['permissions'])
+    print(m['id'], m['type'], m['permissions'], m.get('os_tags'), m.get('arch_tags'))
     for i in z.infolist():
         print(i.filename, oct((i.external_attr >> 16) & 0o777))
 PY

@@ -65,18 +65,11 @@
 namespace casioemu::plugin {
 
 // ---------------------------------------------------------------------------
-// Current build platform.  The compiler's own target predefines are
-// authoritative.  Some build configurations inject these names as
-// over-escaped string macros (e.g. -DCASIOEMU_PLATFORM_OS=\\\"macos\\\"),
-// which are invalid C++ tokens; discard any such injected value and derive
-// the tags from the actual compilation target instead.
+// Current build platform.  A build system may override the tags with valid
+// C string literals (cmake/CasioPlatform.cmake does this for cross-target
+// builds such as ipados/ios).  Only fall back to the compiler's own target
+// predefines when no override was supplied.
 // ---------------------------------------------------------------------------
-#ifdef CASIOEMU_PLATFORM_OS
-#undef CASIOEMU_PLATFORM_OS
-#endif
-#ifdef CASIOEMU_PLATFORM_ARCH
-#undef CASIOEMU_PLATFORM_ARCH
-#endif
 
 #ifndef CASIOEMU_PLATFORM_OS
 #if defined(__ANDROID__)
@@ -204,13 +197,20 @@ inline int PlatformMatchRank(std::string_view os, std::string_view arch,
 	std::string_view buildOs, std::string_view buildArch) {
 	if (!PlatformMatchesBuildImpl(os, arch, buildOs, buildArch))
 		return -1;
+	// When the *build* tag is "any" (unknown target OS/ABI) the wildcard rule
+	// in OsTagMatches/ArchTagMatches makes every tag match.  Prefer an explicit
+	// "any" tag on that side so a universal fallback wins exclusively instead
+	// of tying with (and loading beside) concrete binaries.  Preserve the
+	// lower ranks so concrete binaries still work as a last resort.
 	const bool osExact = os != kOsAny && os == buildOs;
 	const bool archExact = arch != kArchAny && arch == buildArch;
-	if (osExact && archExact)
-		return 4;  // exact os + exact arch
-	if (osExact)
+	const bool osBest = buildOs == kOsAny ? os == kOsAny : osExact;
+	const bool archBest = buildArch == kArchAny ? arch == kArchAny : archExact;
+	if (osBest && archBest)
+		return 4;  // exact os + exact arch (or explicit any on a wildcard build)
+	if (osBest)
 		return 3;  // exact os, wildcard/unknown arch
-	if (archExact)
+	if (archBest)
 		return 2;  // wildcard/unknown os, exact arch
 	return 1;      // both wildcard/unknown
 }

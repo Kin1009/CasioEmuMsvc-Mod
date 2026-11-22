@@ -195,8 +195,10 @@ void PluginLogWindow::RenderInstalled() {
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Reveal"))
 				registry.Reveal(entry.Id());
+			// Invalid packages have no manifest id; Remove(id) would match
+			// the first other entry with an empty id instead of this row.
 			ImGui::SameLine();
-			if (ImGui::SmallButton("Remove")) {
+			if (!entry.Id().empty() && ImGui::SmallButton("Remove")) {
 				m_removeId = entry.Id();
 				m_openRemovePopup = true;
 			}

@@ -2831,6 +2831,11 @@ StartupSelection sui_loop() {
 	SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 	windows2 = new std::vector<UIWindow*>();
 	casioemu::StartupUi ui;
+	// Model packages can declare extra.requires_plugins.  ImportModelPackage()
+	// checks the plugin registry from an async worker, so the registry must be
+	// populated on this (main) thread before any import can be started here.
+	// Initialize() is idempotent; the later LoadPlugins() call becomes a no-op.
+	casioemu::plugin::PluginRegistry::Instance().Initialize();
 	if (const char* mass = std::getenv("CASIOEMU_MASS_TEST")) {
 		const char* scratch = std::getenv("CASIOEMU_MASS_TMP");
 		if (scratch && *scratch)

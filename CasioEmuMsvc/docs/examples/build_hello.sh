@@ -5,7 +5,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DUMMY="$ROOT/docs/examples/dummy"
-OUT="${1:-/tmp/hello.plugin}"
+OUT="${1:?usage: build_hello.sh <output.plugin>}"
 
 python3 "$ROOT/tools/build_plugin.py" \
   --name hello --id com.example.hello --version 1.0.0 \

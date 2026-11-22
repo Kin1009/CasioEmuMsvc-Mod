@@ -61,6 +61,7 @@ function(doc_has_local_environment text out_var)
             "/Volumes/"
             "Wiz/preview"
             "CasioEmuMsvc-Mac"
+            "CasioEmuMsvc-Mod"
             "models/"
             "Wiz/temp"
             "./temp/"

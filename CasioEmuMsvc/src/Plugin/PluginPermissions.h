@@ -9,7 +9,7 @@ namespace casioemu::plugin {
 
 // Capabilities are the runtime units the host checks.  A manifest declares
 // permissions; each permission grants one or more capabilities.  See
-// docs/PLUGIN-GUIDE.md ("Permission enforcement") for the public table.
+// docs/PLUGIN_BUILD_GUIDE.md (section 8, "Permissions") for the public table.
 enum class Capability {
 	EmulatorRead,
 	EmulatorWrite,

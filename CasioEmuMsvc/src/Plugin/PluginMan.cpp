@@ -5,6 +5,7 @@
 #include "PluginRegistry.h"
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <vector>
@@ -108,11 +109,18 @@ namespace {
 					candidates.push_back(e.path());
 			}
 		}
+		// "plugins/X.plugin", "./plugins/X.plugin" and the absolute bundle path
+		// are the same file but compare unequal as paths. Dedup canonically so
+		// fPluginLoadArch is never called twice for one module.
 		std::vector<std::filesystem::path> unique;
+		std::vector<std::string> unique_keys;
 		for (auto& p : candidates) {
-			bool seen = false;
-			for (auto& u : unique) if (u == p) { seen = true; break; }
-			if (!seen) unique.push_back(p);
+			std::error_code ec;
+			const std::string key = std::filesystem::weakly_canonical(p, ec).string();
+			if (std::find(unique_keys.begin(), unique_keys.end(), key) != unique_keys.end())
+				continue;
+			unique_keys.push_back(key);
+			unique.push_back(p);
 		}
 		return unique;
 	}
@@ -383,6 +391,10 @@ void LoadArchitecturePlugins() {
 			}
 		}
 	}
+	// The startup UI may initialize the registry BEFORE this pass runs. Now
+	// that the loaded native modules are known, reconcile any plain-Mach-O
+	// .plugin entries that the registry previously marked "Invalid".
+	casioemu::plugin::PluginRegistry::Instance().ReconcileArchitectureModules();
 }
 #else
 void LoadArchitecturePlugins() {}
