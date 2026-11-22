@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -112,20 +113,61 @@ public:
 	casioemu::ModelInfo ModelInfo;
 
 	void Read(std::istream& is) {
-		Binary::Read(is, RomData);
-		Binary::Read(is, FlashData);
-		Binary::Read(is, InterfaceData);
+		// A hostile u64 length prefix can otherwise reach reserve() and throw
+		// bad_alloc.  Contain allocation failures at the parser boundary.
+		const auto read_payload = [&is](std::vector<unsigned char>& out) {
+			try {
+				Binary::Read(is, out);
+			}
+			catch (const std::bad_alloc&) {
+				throw std::runtime_error("ROM package: container size is too large");
+			}
+			catch (const std::length_error&) {
+				throw std::runtime_error("ROM package: container size is too large");
+			}
+		};
+
+		read_payload(RomData);
+		read_payload(FlashData);
+		read_payload(InterfaceData);
+
 		uint8_t encVersion = 0;
 		Binary::Read(is, encVersion);
+		if (encVersion > 2)
+			throw std::runtime_error("ROM package: unsupported encryption version");
 		EncryptionVersion = encVersion;
 		IsEncrypted = (encVersion != 0);
 		if (EncryptionVersion == 2) {
-			Binary::Read(is, Salt);
-			Binary::Read(is, Nonce);
-			Binary::Read(is, Hmac);
+			read_payload(Salt);
+			read_payload(Nonce);
+			read_payload(Hmac);
 		}
 		Binary::Read(is, Crc32);
 		Binary::Read(is, ModelInfo);
+
+		// Binary::Read silently stops on a short stream.  Without this check a
+		// truncated package (including one missing only its final byte) is a
+		// valid import, because the GUI gate tests badbit rather than failbit.
+		if (!is)
+			throw std::runtime_error("ROM package: truncated package");
+
+		// Plain v0 packages have their integrity checked only in the v1 XOR
+		// rollback path today; verify them at read time too.  Encrypted v1/v2
+		// payloads keep their own XOR/HMAC checks after Decrypt().
+		if (encVersion == 0 && calculateDataCrc32() != Crc32)
+			throw std::runtime_error("ROM package: CRC mismatch");
+
+		// Defence in depth: every consumer of Read() inherits path validation,
+		// not only ExtractTo() and the GUI import gate.  Reject POSIX and
+		// Windows parent components regardless of the host OS.
+		const auto safe_entry = [](const std::string& value) {
+			if (value.find('\\') != std::string::npos)
+				return false;
+			return isPathSafe(value);
+		};
+		if (!safe_entry(ModelInfo.rom_path) || !safe_entry(ModelInfo.flash_path) ||
+			!safe_entry(ModelInfo.interface_path))
+			throw std::runtime_error("ROM package: unsafe entry path");
 	}
 
 	void Write(std::ostream& os) const {

@@ -4,13 +4,16 @@
 
 #include <CommonCrypto/CommonDigest.h>
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <set>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
 
 namespace casioemu::plugin {
 namespace {
@@ -33,6 +36,109 @@ std::string HexEncode(const unsigned char* data, size_t size) {
 }
 
 } // namespace
+
+const char* const kContentDigestFileName = ".plugin-content-sha256";
+
+bool ComputeTreeSha256(const std::filesystem::path& root, std::string& digest, std::string& error) {
+	digest.clear();
+	std::error_code ec;
+	if (!std::filesystem::is_directory(root, ec)) {
+		error = "package content directory is missing";
+		return false;
+	}
+
+	std::vector<std::string> names;
+	for (std::filesystem::recursive_directory_iterator it(root, ec), end;
+		!ec && it != end; it.increment(ec)) {
+		const std::string name = it->path().lexically_relative(root).generic_string();
+		if (name == kContentDigestFileName)
+			continue;
+		const auto status = std::filesystem::symlink_status(it->path(), ec);
+		if (ec) {
+			error = "cannot inspect package content: " + name + ": " + ec.message();
+			return false;
+		}
+		if (std::filesystem::is_symlink(status)) {
+			error = "symlink in package content: " + name;
+			return false;
+		}
+		if (std::filesystem::is_regular_file(status))
+			names.push_back(name);
+		else if (!std::filesystem::is_directory(status)) {
+			error = "non-regular file in package content: " + name;
+			return false;
+		}
+	}
+	if (ec) {
+		error = "cannot enumerate package content: " + ec.message();
+		return false;
+	}
+	std::sort(names.begin(), names.end());
+
+	CC_SHA256_CTX context;
+	CC_SHA256_Init(&context);
+	std::array<char, 64 * 1024> buffer{};
+	for (const auto& name : names) {
+		CC_SHA256_Update(&context, name.data(), static_cast<CC_LONG>(name.size()));
+		const char separator = '\0';
+		CC_SHA256_Update(&context, &separator, 1);
+
+		std::ifstream input(root / name, std::ios::binary);
+		if (!input) {
+			error = "cannot read package content: " + name;
+			return false;
+		}
+		while (input.good()) {
+			input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+			const std::streamsize read = input.gcount();
+			if (read > 0)
+				CC_SHA256_Update(&context, buffer.data(), static_cast<CC_LONG>(read));
+		}
+		if (input.bad()) {
+			error = "failed while reading package content: " + name;
+			return false;
+		}
+	}
+
+	unsigned char hash[CC_SHA256_DIGEST_LENGTH]{};
+	CC_SHA256_Final(hash, &context);
+	digest = HexEncode(hash, sizeof(hash));
+	return true;
+}
+
+bool VerifyPackageContent(const Package& package, std::string* error) {
+	const auto fail = [&](const std::string& message) {
+		if (error)
+			*error = message;
+		return false;
+	};
+	// `valid` is assigned only after the manifest check below, so verification
+	// must rely on the root path rather than that flag.
+	if (package.root.empty())
+		return fail("package has no extracted content");
+	std::error_code link_ec;
+	if (std::filesystem::is_symlink(std::filesystem::symlink_status(package.root, link_ec)))
+		return fail("package content directory is a symlink");
+
+	std::ifstream marker(package.root / kContentDigestFileName, std::ios::binary);
+	if (!marker)
+		return fail("package content digest is missing");
+	std::string expected((std::istreambuf_iterator<char>(marker)), std::istreambuf_iterator<char>());
+	while (!expected.empty() && (expected.back() == '\n' || expected.back() == '\r'))
+		expected.pop_back();
+	if (expected.size() != 64)
+		return fail("package content digest is malformed");
+
+	std::string actual;
+	std::string hash_error;
+	if (!ComputeTreeSha256(package.root, actual, hash_error))
+		return fail(hash_error);
+	if (actual != expected)
+		return fail("extracted package content changed since approval");
+	if (error)
+		error->clear();
+	return true;
+}
 
 bool ComputeFileSha256(const std::filesystem::path& file, std::string& digest, std::string& error) {
 	std::ifstream input(file, std::ios::binary);
@@ -74,14 +180,24 @@ bool ExtractPackage(const std::filesystem::path& file, const std::filesystem::pa
 
 	const std::filesystem::path cache_dir = cacheRoot / out.sha256;
 	std::error_code ec;
-	if (std::filesystem::exists(cache_dir / "plugin.json", ec)) {
+	// A cache directory named after a hash is not proof of its contents: an
+	// attacker could edit or symlink it after the original approval.  Verify
+	// the content digest recorded at extraction time, otherwise re-extract
+	// from the hash-bound archive.
+	const bool cached_symlink = std::filesystem::is_symlink(
+		std::filesystem::symlink_status(cache_dir, ec));
+	if (!ec && !cached_symlink && std::filesystem::exists(cache_dir / "plugin.json", ec)) {
 		out.root = cache_dir;
-		ManifestResult manifest = LoadManifestFile(cache_dir / "plugin.json");
-		out.code = manifest.code;
-		out.message = manifest.message;
-		out.manifest = std::move(manifest.manifest);
-		out.valid = manifest.ok;
-		return out.valid;
+		std::string content_error;
+		if (VerifyPackageContent(out, &content_error)) {
+			ManifestResult manifest = LoadManifestFile(cache_dir / "plugin.json");
+			out.code = manifest.code;
+			out.message = manifest.message;
+			out.manifest = std::move(manifest.manifest);
+			out.valid = manifest.ok;
+			return out.valid;
+		}
+		out.root.clear();
 	}
 
 	const std::filesystem::path temp_dir = cache_dir.string() + ".tmp-" + std::to_string(::getpid());
@@ -247,6 +363,25 @@ bool ExtractPackage(const std::filesystem::path& file, const std::filesystem::pa
 		out.message = manifest.message;
 		out.valid = false;
 		return false;
+	}
+
+	// Record a digest of the extracted bytes so a later warm-cache hit can
+	// prove the files are still the ones that came from this hash-bound archive.
+	std::string content_digest;
+	std::string content_error;
+	if (!ComputeTreeSha256(temp_dir, content_digest, content_error)) {
+		std::filesystem::remove_all(temp_dir, ec);
+		SetError(out, "package.content", content_error);
+		return false;
+	}
+	{
+		std::ofstream marker(temp_dir / kContentDigestFileName, std::ios::binary | std::ios::trunc);
+		if (!marker) {
+			std::filesystem::remove_all(temp_dir, ec);
+			SetError(out, "package.content", "cannot write package content digest");
+			return false;
+		}
+		marker << content_digest << '\n';
 	}
 
 	std::filesystem::remove_all(cache_dir, ec);

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -231,6 +232,22 @@ int main() {
 	Package cached;
 	Check(ExtractPackage(root / "fixture.plugin", root / "cache", cached), "cache hit extracts");
 	Check(cached.sha256 == package.sha256 && cached.root == package.root, "cache key is the hash");
+
+	// A warm cache is accepted only when its recorded content digest still
+	// matches the extracted bytes (no silent auto-trust of changed content).
+	Check(VerifyPackageContent(cached), "warm cache content digest verifies");
+	{
+		std::ofstream tampered(cached.root / "assets" / "entry.json", std::ios::binary | std::ios::trunc);
+		tampered << "{\"schema\":1,\"variant\":\"light\"}";
+	}
+	Check(!VerifyPackageContent(cached), "tampered cache content fails verification");
+	Package repaired;
+	Check(ExtractPackage(root / "fixture.plugin", root / "cache", repaired), "tampered cache is re-extracted");
+	Check(VerifyPackageContent(repaired), "re-extracted content digest verifies");
+	std::ifstream restored(repaired.root / "assets" / "entry.json");
+	const std::string restored_text((std::istreambuf_iterator<char>(restored)), std::istreambuf_iterator<char>());
+	Check(restored_text.find("#1f1f1f") != std::string::npos,
+		"tampered bytes are restored from the hash-bound archive");
 
 	// ------------------------------------------------------ zip traversal
 	Check(MakeZip(root / "traversal.plugin", {

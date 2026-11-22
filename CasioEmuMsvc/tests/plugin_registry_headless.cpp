@@ -332,6 +332,9 @@ struct PackageSpec {
 	std::string entry_document;
 	std::string layout_document;
 	std::string native_entry;
+	// Optional for script plugins (empty means the declarative default).
+	std::string entry_point;
+	std::string script_source;
 };
 
 std::filesystem::path BuildPackage(const std::filesystem::path& plugins_dir,
@@ -340,10 +343,11 @@ std::filesystem::path BuildPackage(const std::filesystem::path& plugins_dir,
 	std::string document = spec.entry_document;
 	if (!spec.layout_document.empty())
 		document = spec.layout_document;
+	const std::string entry_point = spec.entry_point.empty() ? "assets/entry.json" : spec.entry_point;
 	std::vector<std::pair<std::string, std::string>> entries = {
-		{ "plugin.json", ManifestJson(spec.id, spec.type, spec.permissions, "assets/entry.json",
+		{ "plugin.json", ManifestJson(spec.id, spec.type, spec.permissions, entry_point,
 			spec.native_entry) },
-		{ "assets/entry.json", document },
+		{ entry_point, spec.script_source.empty() ? document : spec.script_source },
 	};
 	if (!spec.native_entry.empty()) {
 		std::ifstream input(fixture, std::ios::binary);
@@ -394,6 +398,20 @@ int main() {
 	Check(!bad_api_fixture.empty() && std::filesystem::exists(bad_api_fixture), "bad-api fixture exists");
 	Check(!bad_abi_fixture.empty() && std::filesystem::exists(bad_abi_fixture), "bad-abi fixture exists");
 
+	// AUDITA-01: the host parser must accept a SH3PLUGIN-style arch-core
+	// manifest (the 'arch' capability plus multiple OS tags).
+	{
+		const auto parsed = ParseManifest(
+			R"({"schema":1,"id":"com.test.archcore","name":"Arch Core","version":"1.0.0",)"
+			R"("type":"tool","api_version":3,"entry_point":"native.dylib",)"
+			R"("native_entry":"native.dylib","platforms":["macos","linux","windows"],)"
+			R"("permissions":["arch","ui.shell"]})");
+		Check(parsed.ok && parsed.manifest.HasPermission("arch") &&
+			parsed.manifest.platforms.size() == 3,
+			"host manifest accepts arch permission and multi-platform arch-core");
+	}
+
+	const std::string kScriptSource = "local marker = 1\n";
 	const std::vector<PackageSpec> specs = {
 		{ "theme-ok.plugin", "com.test.theme", "theme", R"(["ui.shell"])", ThemeDocument(), {}, {} },
 		{ "theme-noperm.plugin", "com.test.theme.noperm", "theme", "[]", ThemeDocument("#203040"), {}, {} },
@@ -411,6 +429,10 @@ int main() {
 		{ "tool-badabi.plugin", "com.test.tool.badabi", "tool", R"(["ui.shell"])", "{}", {}, "lib/fixture.dylib" },
 		{ "theme-hash.plugin", "com.test.theme.hash", "theme", R"(["ui.shell"])", ThemeDocument(), {}, {} },
 		{ "theme-perm.plugin", "com.test.theme.perm", "theme", R"(["ui.shell"])", ThemeDocument(), {}, {} },
+		{ "script-ok.plugin", "com.test.script.ok", "script", R"(["ui.shell"])", "", "", "",
+			"main.lua", kScriptSource },
+		{ "script-hash.plugin", "com.test.script.hash", "script", R"(["ui.shell"])", "", "", "",
+			"main.lua", kScriptSource },
 	};
 
 	// Build packages and the trust store before Initialize.
@@ -429,6 +451,8 @@ int main() {
 			trust_sha = std::string(64, 'a');
 		if (spec.id == "com.test.theme.hash")
 			trust_sha = std::string(64, 'b');
+		if (spec.id == "com.test.script.hash")
+			trust_sha = std::string(64, 'c');
 
 		TrustRecord record;
 		record.id = spec.id;
@@ -528,6 +552,40 @@ int main() {
 	Check(Find(registry, "com.test.theme.perm")->state == "Awaiting approval",
 		"permission change re-prompts");
 
+	// --------------------------------------------------- script trust gate
+	{
+		PluginEntry* script = Find(registry, "com.test.script.ok");
+		Check(script && script->state == "Loaded" && script->scriptRuntime,
+			"hash-matched script plugin loads in a sandbox");
+		PluginEntry* changed = Find(registry, "com.test.script.hash");
+		Check(changed && changed->state == "Awaiting approval" && !changed->scriptRuntime &&
+			!changed->apiContext,
+			"script hash change re-prompts with no runtime or capability facade");
+
+		// Changing the installed script bytes must invalidate the grant even
+		// though the archive hash recorded by the registry was not refreshed.
+		const auto script_file = script->package.root / "main.lua";
+		WriteFile(script_file, "local tampered = 1\n");
+		registry.ReloadDeclarative();
+		Check(script->state == "Error" && script->error.rfind("package.content", 0) == 0 &&
+			!script->loaded,
+			"tampered script bytes are refused before any capability is granted");
+		WriteFile(script_file, kScriptSource);
+		registry.SetEnabled("com.test.script.ok", false);
+		registry.SetEnabled("com.test.script.ok", true);
+		Check(script->state == "Loaded" && script->scriptRuntime,
+			"restored script bytes load again after re-approval of the same hash");
+
+		// Re-enabling after an archive hash change must also re-prompt.
+		const std::string approved_hash = script->package.sha256;
+		registry.SetEnabled("com.test.script.ok", false);
+		script->package.sha256 = std::string(64, 'd');
+		registry.SetEnabled("com.test.script.ok", true);
+		Check(script->state == "Awaiting approval" && !script->loaded,
+			"script hash change blocks re-enable (no silent capability grant)");
+		script->package.sha256 = approved_hash;
+	}
+
 	// ------------------------------------------------------- native load
 	PluginEntry* tool = Find(registry, "com.test.tool");
 	Check(tool && tool->state == "Loaded" && tool->handle != nullptr, "native tool loads");
@@ -559,6 +617,21 @@ int main() {
 		Check(tool->state == "Loaded" && tool->handle != nullptr, "Enable reloads the stopped plugin");
 	}
 
+	// A native module must never be dlopen'd once its approved hash changes.
+	{
+		const std::string approved_hash = tool->package.sha256;
+		registry.SetEnabled("com.test.tool", false);
+		tool->package.sha256 = std::string(64, 'e');
+		registry.SetEnabled("com.test.tool", true);
+		Check(tool->state == "Awaiting approval" && !tool->loaded && tool->handle == nullptr,
+			"changed native hash blocks dlopen on re-enable");
+		tool->package.sha256 = approved_hash;
+		registry.SetEnabled("com.test.tool", false);
+		registry.SetEnabled("com.test.tool", true);
+		Check(tool->state == "Loaded" && tool->handle != nullptr,
+			"native plugin loads again when the approved hash is restored");
+	}
+
 	// ----------------------------------------------------------- unload
 	{
 		const std::filesystem::path marker = root / "unload-marker.txt";
@@ -584,8 +657,12 @@ int main() {
 			{ "assets/entry.json", ThemeDocument() } });
 		std::string error;
 		Check(registry.InstallFromFile(staged, &error), "InstallFromFile copies and loads a package");
-		Check(std::filesystem::exists(exe / "settings" / "Plugins" / "installed.plugin"),
-			"installed package lives in the user plugin folder");
+		// WritableInstallDir prefers the app bundle's plugins/ folder and only
+		// falls back to the user folder for read-only (signed) bundles.  Both
+		// are valid outcomes for a headless fake host.
+		Check(std::filesystem::exists(exe / "plugins" / "installed.plugin") ||
+			std::filesystem::exists(exe / "settings" / "Plugins" / "installed.plugin"),
+			"installed package lives in a recognised plugin folder");
 		PluginEntry* installed = Find(registry, "com.test.installed");
 		Check(installed && installed->state == "Awaiting approval",
 			"new install prompts for trust");

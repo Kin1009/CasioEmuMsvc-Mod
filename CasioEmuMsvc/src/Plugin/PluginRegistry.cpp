@@ -171,6 +171,13 @@ std::string TrustReason(const TrustEvaluation& evaluation) {
 	return "not trusted yet";
 }
 
+// A plugin whose bytes can execute code -- natively or through the Lua
+// runtime -- must re-prompt when its approved hash changes.  Declarative
+// documents with unchanged permissions keep their legacy upgrade behaviour.
+bool HashIsTrustBoundary(const Manifest& manifest, const std::vector<std::string>& nativeBinaries) {
+	return manifest.IsNative() || !nativeBinaries.empty() || manifest.type == PluginType::Script;
+}
+
 } // namespace
 
 PluginRegistry& PluginRegistry::Instance() {
@@ -401,8 +408,10 @@ void PluginRegistry::ApplyTrustAndLoad(PluginEntry& entry) {
 
 	const Manifest& manifest = entry.package.manifest;
 	const TrustRecord* record = m_trust.Find(manifest.id);
-	const bool has_native = manifest.IsNative() || !entry.compatibleNativeBinaries.empty();
-	const TrustEvaluation evaluation = EvaluateTrust(record, has_native,
+	// Scripts execute arbitrary Lua with the capabilities granted at approval,
+	// so a byte change must re-prompt exactly like a native binary.
+	const bool hash_is_boundary = HashIsTrustBoundary(manifest, entry.compatibleNativeBinaries);
+	const TrustEvaluation evaluation = EvaluateTrust(record, hash_is_boundary,
 		entry.package.sha256, manifest.permissions);
 
 	entry.trustedAt = record ? record->trustedAt : std::string();
@@ -456,6 +465,48 @@ void PluginRegistry::ApplyTrustAndLoad(PluginEntry& entry) {
 			TrustReason(evaluation) + ")");
 		return;
 	}
+}
+
+bool PluginRegistry::HasValidSessionApproval(const PluginEntry& entry) const {
+	return entry.trustedThisSession &&
+		entry.sessionApprovedSha256 == entry.package.sha256 &&
+		SamePermissionSet(entry.sessionApprovedPermissions, entry.package.manifest.permissions);
+}
+
+bool PluginRegistry::VerifyLoadAuthorization(const PluginEntry& entry, std::string& reason) const {
+	reason.clear();
+	if (!entry.package.valid) {
+		reason = "package.invalid: no valid package";
+		return false;
+	}
+	if (entry.blocked || !entry.enabled) {
+		reason = "plugin.blocked: plugin is blocked or disabled";
+		return false;
+	}
+
+	const Manifest& manifest = entry.package.manifest;
+	if (!HasValidSessionApproval(entry)) {
+		const TrustRecord* record = m_trust.Find(entry.Id());
+		const TrustEvaluation evaluation = EvaluateTrust(record,
+			HashIsTrustBoundary(manifest, entry.compatibleNativeBinaries),
+			entry.package.sha256, manifest.permissions);
+		if (evaluation.decision != TrustDecision::Trusted ||
+			evaluation.hashChanged || !evaluation.hashKnown) {
+			reason = "trust: " + TrustReason(evaluation);
+			return false;
+		}
+	}
+
+	// The archive hash names the cache directory; this proves the files we are
+	// about to execute still match the archive that was approved.
+	if (!entry.package.root.empty()) {
+		std::string content_error;
+		if (!VerifyPackageContent(entry.package, &content_error)) {
+			reason = "package.content: " + content_error;
+			return false;
+		}
+	}
+	return true;
 }
 
 bool PluginRegistry::RequireCapability(PluginEntry& entry, Capability capability,
@@ -590,6 +641,15 @@ void PluginRegistry::LoadEntry(PluginEntry& entry) {
 }
 
 bool PluginRegistry::LoadDeclarative(PluginEntry& entry) {
+	std::string auth_reason;
+	if (!VerifyLoadAuthorization(entry, auth_reason)) {
+		entry.loaded = false;
+		entry.state = auth_reason.rfind("trust:", 0) == 0 ? "Awaiting approval" : "Error";
+		entry.error = auth_reason;
+		LogLine("[WARN] " + entry.Id() + ": declarative load refused: " + auth_reason);
+		return false;
+	}
+
 	std::string text;
 	std::string error;
 	const std::filesystem::path document_path = entry.package.root / entry.package.manifest.entryPoint;
@@ -682,6 +742,17 @@ bool PluginRegistry::LoadDeclarative(PluginEntry& entry) {
 }
 
 bool PluginRegistry::LoadScript(PluginEntry& entry) {
+	// No script code runs, and no capability-bearing facade is created, until
+	// the current bytes are proven to be the approved ones.
+	std::string auth_reason;
+	if (!VerifyLoadAuthorization(entry, auth_reason)) {
+		entry.loaded = false;
+		entry.state = auth_reason.rfind("trust:", 0) == 0 ? "Awaiting approval" : "Error";
+		entry.error = auth_reason;
+		LogLine("[WARN] " + entry.Id() + ": script load refused: " + auth_reason);
+		return false;
+	}
+
 	const Manifest& manifest = entry.package.manifest;
 	std::string source;
 	std::string error;
@@ -828,6 +899,17 @@ bool PluginRegistry::LoadScript(PluginEntry& entry) {
 }
 
 bool PluginRegistry::LoadNative(PluginEntry& entry) {
+	// Last-line gate before dlopen: a stale entry, an archive replaced after
+	// approval or tampered cached files must never reach native execution.
+	std::string auth_reason;
+	if (!VerifyLoadAuthorization(entry, auth_reason)) {
+		entry.loaded = false;
+		entry.state = auth_reason.rfind("trust:", 0) == 0 ? "Awaiting approval" : "Error";
+		entry.error = auth_reason;
+		LogLine("[WARN] " + entry.Id() + ": native load refused: " + auth_reason);
+		return false;
+	}
+
 	if (!RequireCapability(entry, Capability::Native, "native library loading"))
 		return false;
 
@@ -988,7 +1070,16 @@ void PluginRegistry::Approve(PluginEntry& entry, bool remember) {
 	entry.pendingTrust = false;
 	entry.enabled = true;
 	entry.trusted = true;
-	if (remember) {
+	if (!remember) {
+		// Explicit one-shot consent is bound to exactly what the user saw.
+		entry.trustedThisSession = true;
+		entry.sessionApprovedSha256 = entry.package.sha256;
+		entry.sessionApprovedPermissions = entry.package.manifest.permissions;
+	}
+	else {
+		entry.trustedThisSession = false;
+		entry.sessionApprovedSha256.clear();
+		entry.sessionApprovedPermissions.clear();
 		TrustRecord record;
 		record.id = entry.Id();
 		record.version = entry.Version();
@@ -1194,10 +1285,15 @@ void PluginRegistry::SetEnabled(const std::string& id, bool enabled) {
 		}
 		if (entry.trusted) {
 			// Re-check the record: the package may have changed while disabled.
+			// Scripts are a hash boundary as well: a rewritten .lua would run
+			// with the capabilities granted by the original approval.
 			const TrustRecord* record = m_trust.Find(entry.Id());
-			const bool changed = !entry.package.valid || !record ||
-				!SamePermissionSet(record->permissions, entry.package.manifest.permissions) ||
-				(entry.IsNative() && record->sha256 != entry.package.sha256);
+			const TrustEvaluation evaluation = EvaluateTrust(record,
+				HashIsTrustBoundary(entry.package.manifest, entry.compatibleNativeBinaries),
+				entry.package.sha256, entry.package.manifest.permissions);
+			const bool changed = !entry.package.valid ||
+				(!HasValidSessionApproval(entry) &&
+				 (evaluation.decision != TrustDecision::Trusted || evaluation.hashChanged));
 			if (changed) {
 				entry.pendingTrust = true;
 				entry.state = "Awaiting approval";

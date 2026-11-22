@@ -34,6 +34,10 @@ struct PluginEntry {
 	void* handle = nullptr;
 	void* apiContext = nullptr;
 	std::string trustedAt;
+	// "Allow Once" consent is bound to the exact bytes/permissions the user
+	// approved.  A changed package invalidates it just like a stored record.
+	std::string sessionApprovedSha256;
+	std::vector<std::string> sessionApprovedPermissions;
 	std::string state = "Discovered";
 	std::string error;
 	std::string document;
@@ -140,6 +144,11 @@ private:
 	bool ApplyLegacyArchitectureEntry(PluginEntry& entry);
 	void AddPackage(const std::filesystem::path& file);
 	void ApplyTrustAndLoad(PluginEntry& entry);
+	// Final gate immediately before any load that can execute plugin code or
+	// grant capabilities.  Fails closed on missing/changed hash, changed
+	// permissions, blocked/disabled records and tampered extracted content.
+	[[nodiscard]] bool HasValidSessionApproval(const PluginEntry& entry) const;
+	[[nodiscard]] bool VerifyLoadAuthorization(const PluginEntry& entry, std::string& reason) const;
 	void LoadEntry(PluginEntry& entry);
 	bool LoadNative(PluginEntry& entry);
 	bool LoadDeclarative(PluginEntry& entry);

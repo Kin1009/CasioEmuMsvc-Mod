@@ -30,6 +30,16 @@ struct ExtractionLimits {
 };
 
 bool ComputeFileSha256(const std::filesystem::path& file, std::string& digest, std::string& error);
+
+// Digest over the *extracted files* (sorted relative paths + bytes), stored
+// beside them at extraction time.  The archive hash names the cache directory;
+// this digest is what proves the files actually loaded are still the approved
+// ones.  Symlinks are rejected and the digest file itself is not hashed.
+extern const char* const kContentDigestFileName;
+[[nodiscard]] bool ComputeTreeSha256(const std::filesystem::path& root, std::string& digest,
+	std::string& error);
+[[nodiscard]] bool VerifyPackageContent(const Package& package, std::string* error = nullptr);
+
 bool ExtractPackage(const std::filesystem::path& file, const std::filesystem::path& cacheRoot, Package& out,
 	const ExtractionLimits& limits = {});
 
