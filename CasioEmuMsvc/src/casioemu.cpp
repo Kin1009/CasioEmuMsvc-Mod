@@ -504,6 +504,7 @@ for (;;) {
 	casioemu::mac::ConfigureFramelessWindow(emulator.window);
 	SDL_SetWindowTitle(emulator.window, "CasioEmuMsvc");
 #endif
+#ifdef __APPLE__
 	casioemu::mac::MenuActions menu_actions;
 	menu_actions.open_model = [] { casioemu::shell::RequestOpenModel(); };
 	menu_actions.open_folder = [] { casioemu::shell::RequestOpenFolder(); };
@@ -518,6 +519,7 @@ for (;;) {
 	menu_actions.pause_resume = [] { casioemu::shell::TogglePause(); };
 	menu_actions.reset = [] { casioemu::shell::ResetSession(); };
 	casioemu::mac::InstallNativeMenu(menu_actions);
+#endif
 
 	SDL_ShowWindow(emulator.window);
 	SDL_RaiseWindow(emulator.window);
