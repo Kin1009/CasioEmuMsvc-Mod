@@ -28,10 +28,19 @@ namespace casioemu {
 inline constexpr int PLUGIN_API_VERSION = casioemu::plugin::kPluginHostApiVersion;
 // Alias used by architecture-provider plugins (casioemu namespace).
 using IArchitectureProviderRegistry = casioemu::IArchitectureRegistry;
-// Bumped whenever the layout or vtable of UIWindow below changes.  Native
+// Bumped whenever the layout OR vtable of UIWindow below changes.  Native
 // plugins can export fPluginAbiSignature() (see PLUGIN_EXPORT_ABI) and the
 // loader rejects mismatches with native.api instead of crashing later.
-inline constexpr unsigned long kPluginUiWindowAbiRevision = 2;
+//
+// RE_ARCHABI (2026-11-22): bumped 2 -> 3. commit 4221531 added nine *virtual*
+// editor methods to the host UIWindow (Gui/Ui.hpp) between RenderCore() and
+// GotoMemoryAddress().  sizeof(UIWindow) did not change (all new members are
+// virtual, so only the vtable grew), so the old (sizeof << 8) ^ 2 signature
+// could not detect the drift and old plugins passed the handshake with an
+// incompatible vtable.  The SDK mirror below now lists those nine methods in
+// the SAME order as the host; any further host change requires the same edit
+// here AND another revision bump.
+inline constexpr unsigned long kPluginUiWindowAbiRevision = 3;
 #ifdef _NO_FUND_API
 #include "Hooks.h"
 #include "Ui.hpp"
@@ -229,10 +238,15 @@ public:
 
 #if !defined(_NO_FUND_API) && !defined(CASIOEMU_HEADLESS_PLUGIN)
 // This definition is ABI-identical to the host's UIWindow (Gui/Ui.hpp):
-// same member order, same virtual slot order (Render, RenderCore,
-// GotoMemoryAddress, ~UIWindow), same member functions.  The host builds with
-// _NO_FUND_API so it uses Gui/Ui.hpp directly; plugin translation units use
-// this one.  Keep the two in sync and bump kPluginUiWindowAbiRevision.
+// same member order AND same complete virtual slot order:
+//   Render, RenderCore, OpenEditorDocument, SetEditorTarget,
+//   SetEditorLanguage, SetEditorRopPadding, SetEditorOriginalRom,
+//   CopyBuildLauncher, BuildEditorDocument, PreprocessEditorDocument,
+//   LintEditorDocument, GotoMemoryAddress, ~UIWindow.
+// The host builds with _NO_FUND_API so it uses Gui/Ui.hpp directly; plugin
+// translation units use this one.  Keep the two in sync (a vtable-only change
+// does NOT alter sizeof, so the sizeof static_assert alone cannot catch drift)
+// and bump kPluginUiWindowAbiRevision for ANY member or virtual change.
 class UIWindow {
 public:
 	UIWindow(const char* name) : name(name) {}
@@ -263,6 +277,21 @@ public:
 		bring_to_front_requested = true;
 	}
 	virtual void RenderCore() = 0;
+	// RE_ARCHABI: these nine slots MUST mirror Gui/Ui.hpp exactly, in this order.
+	// They were added to the host in commit 4221531 without updating this SDK
+	// mirror; omitting them shifts every later vtable slot (GotoMemoryAddress,
+	// ~UIWindow) and makes the host call garbage through a plugin window vptr.
+	// Optional integration hooks used by the shell's file editor and build
+	// overlay.  Default no-ops keep every existing tool unchanged.
+	virtual bool OpenEditorDocument(const std::string& /*path*/, const std::string& /*text*/) { return false; }
+	virtual void SetEditorTarget(const std::string& /*target*/) {}
+	virtual void SetEditorLanguage(const std::string& /*language*/) {}
+	virtual void SetEditorRopPadding(int /*padding*/) {}
+	virtual void SetEditorOriginalRom(const std::string& /*path*/) {}
+	virtual bool CopyBuildLauncher() { return false; }
+	virtual void BuildEditorDocument(bool /*run*/) {}
+	virtual void PreprocessEditorDocument() {}
+	virtual void LintEditorDocument() {}
 	// Optional: navigate the window to a specific memory address. No-op by default.
 	virtual void GotoMemoryAddress(uint32_t /*addr*/) {}
 	virtual ~UIWindow() {}
@@ -343,7 +372,21 @@ using PluginUnload = void (*)(PluginApi* api);
 ///
 /// The host calls fPluginApiVersion()/fPluginAbiSignature() during load and
 /// rejects a mismatch with native.api instead of risking a layout crash.
+///
+/// RE_ARCHABI: the signature export is now conditional. PluginUiWindowAbiSignature()
+/// only exists in non-headless builds (no UIWindow layout to sign). Previously this
+/// macro unconditionally referenced it, so any plugin built with
+/// CASIOEMU_HEADLESS_PLUGIN failed to compile; sh3plugin had to hand-roll the
+/// exports with its own #ifndef workaround. A headless plugin exports only
+/// fPluginApiVersion, which the loader's legacy fallback accepts as "no signature
+/// to compare" (correct: there is no UIWindow in that build).
 /// </summary>
+#if !defined(CASIOEMU_HEADLESS_PLUGIN)
+#define PLUGIN_EXPORT_ABI_SIGNATURE() \
+	extern "C" unsigned long fPluginAbiSignature() { return PluginUiWindowAbiSignature(); }
+#else
+#define PLUGIN_EXPORT_ABI_SIGNATURE() /* no UIWindow in headless builds */
+#endif
 #define PLUGIN_EXPORT_ABI() \
 	extern "C" int fPluginApiVersion() { return PLUGIN_API_VERSION; } \
-	extern "C" unsigned long fPluginAbiSignature() { return PluginUiWindowAbiSignature(); }
+	PLUGIN_EXPORT_ABI_SIGNATURE()

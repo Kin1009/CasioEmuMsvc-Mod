@@ -54,11 +54,27 @@ struct SdkUiWindowMirror {
 	ImGuiWindowFlags flags{};
 	virtual void Render() {}
 	virtual void RenderCore() = 0;
+	// RE_ARCHABI: nine editor slots added to host UIWindow in commit 4221531.
+	// Keep this mirror's virtual ORDER identical to PluginApi.h and Gui/Ui.hpp.
+	virtual bool OpenEditorDocument(const std::string&, const std::string&) { return false; }
+	virtual void SetEditorTarget(const std::string&) {}
+	virtual void SetEditorLanguage(const std::string&) {}
+	virtual void SetEditorRopPadding(int) {}
+	virtual void SetEditorOriginalRom(const std::string&) {}
+	virtual bool CopyBuildLauncher() { return false; }
+	virtual void BuildEditorDocument(bool) {}
+	virtual void PreprocessEditorDocument() {}
+	virtual void LintEditorDocument() {}
 	virtual void GotoMemoryAddress(uint32_t) {}
 	virtual ~SdkUiWindowMirror() {}
 };
 static_assert(sizeof(SdkUiWindowMirror) == sizeof(UIWindow),
 	"SDK UIWindow layout drifted from Gui/Ui.hpp; update PluginApi.h and bump kPluginUiWindowAbiRevision");
+// NOTE: sizeof() alone cannot detect a vtable-only change (adding virtuals does
+// not change object size). RE_ARCHABI adds tools/verify_uiwindow_vtable.sh,
+// which compiles the host and SDK headers in separate TUs with
+// -fdump-lang-class and diffs the vtable slot sequences. Run it whenever
+// UIWindow changes; the ABI signature revision must also be bumped.
 } // namespace
 
 namespace {

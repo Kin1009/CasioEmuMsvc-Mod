@@ -108,14 +108,23 @@ inline const StaticBootstrapReport& RegisterStaticArchitectureProviders(const St
 } // namespace arch
 } // namespace casioemu
 
+/// Two-level token pasting. `##` suppresses expansion of its operands, so
+/// `name ## __COUNTER__` pastes the literal token `__COUNTER__` and every
+/// registration in a translation unit declares the SAME identifier. Expanding
+/// `__COUNTER__` in an intermediate macro first gives each registration a
+/// unique symbol (FA-01 regression).
+#define CASIOEMU_ARCH_JOIN_IMPL(a, b) a##b
+#define CASIOEMU_ARCH_JOIN(a, b) CASIOEMU_ARCH_JOIN_IMPL(a, b)
+
 /// Declare a statically linked architecture provider. `factory` must be a
 /// zero-argument function returning IArchitectureProvider*; call this once per
-/// core in that core's translation unit. Example:
+/// core in that core's translation unit. Multiple registrations in one TU are
+/// supported (each gets a distinct `__COUNTER__`-suffixed symbol). Example:
 ///
 ///   static casioemu::IArchitectureProvider* MakeMyCore() { return new MyCore(); }
 ///   CASIOEMU_REGISTER_STATIC_ARCH_PROVIDER(MakeMyCore);
 #define CASIOEMU_REGISTER_STATIC_ARCH_PROVIDER(factory)                                  \
 	namespace {                                                                            \
-	[[maybe_unused]] const bool casioemu_static_arch_reg_##__COUNTER__ =                  \
+	[[maybe_unused]] const bool CASIOEMU_ARCH_JOIN(casioemu_static_arch_reg_, __COUNTER__) = \
 		::casioemu::arch::RegisterStaticProviderFactory(&(factory));                      \
 	}
