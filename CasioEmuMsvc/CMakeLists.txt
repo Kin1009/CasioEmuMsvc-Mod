@@ -695,6 +695,10 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
         CASIOEMU_PLUGIN_BAD_ABI_FIXTURE="$<TARGET_FILE:casioemu_plugin_badabi_fixture>")
     if(APPLE)
         target_link_options(casioemu_plugin_registry_headless PRIVATE "-Wl,-export_dynamic")
+    elseif(UNIX)
+        # ELF dlopen() fixtures resolve ImGui/host symbols from this executable;
+        # without -rdynamic they fail to load and 14 registry checks fail.
+        target_link_options(casioemu_plugin_registry_headless PRIVATE "-rdynamic")
     endif()
     target_link_libraries(casioemu_plugin_registry_headless PRIVATE Threads::Threads lua)
     add_dependencies(casioemu_plugin_registry_headless
