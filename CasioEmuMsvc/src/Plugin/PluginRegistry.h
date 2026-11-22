@@ -5,12 +5,16 @@
 #include "PlatformTags.h"
 #include "PluginTrust.h"
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace casioemu::plugin {
+
+class ScriptRuntime;
 
 struct PluginEntry {
 	Package package;
@@ -49,6 +53,10 @@ struct PluginEntry {
 	// is also mirrored in handle/apiContext for the legacy single-module path.
 	std::vector<void*> nativeHandles;
 	std::vector<void*> nativeApiContexts;
+	// Data-only script plugins have no native handle: their state lives in
+	// this sandboxed runtime instead.  Declarative trust/hash/reload rules
+	// apply because there is no native code to re-prompt for.
+	std::shared_ptr<ScriptRuntime> scriptRuntime;
 
 	[[nodiscard]] bool IsNative() const {
 		return package.manifest.IsNative() || !compatibleNativeBinaries.empty();
@@ -69,6 +77,10 @@ public:
 	// Per-frame host pump.  RenderTrustModal() calls it, so the existing call
 	// site in Gui/Ui.cpp also services theme reapplication and trust state.
 	void PumpFrame();
+	// Dispatches a calculator key event to loaded script plugins that declare
+	// emulator.read and define on_key.  Host input hooks can call this when
+	// key routing is enabled (Phase 2); it is safe to call with no scripts.
+	void NotifyScriptKey(int ki, int ko, bool down);
 	void RenderTrustModal();
 
 	// Copies `file` inside the .app bundle's plugins folder (with a read-only
@@ -126,6 +138,8 @@ private:
 	void LoadEntry(PluginEntry& entry);
 	bool LoadNative(PluginEntry& entry);
 	bool LoadDeclarative(PluginEntry& entry);
+	// Data-only Lua script: compile/run main.lua in a fresh sandboxed state.
+	bool LoadScript(PluginEntry& entry);
 	// Scans the extracted package for <name>-<os>-<arch>.<ext> binaries and
 	// fills entry.compatibleNativeBinaries.  On a tagged package with no match,
 	// sets entry.platformMismatch / Error state and returns false so the plugin
@@ -157,6 +171,8 @@ private:
 	std::string m_activeThemeId;
 	std::string m_activeThemeDocument;
 	bool m_themeStale = false;
+	// Drives the dt argument of script on_frame callbacks.
+	std::chrono::steady_clock::time_point m_lastScriptFrame{};
 };
 
 } // namespace casioemu::plugin

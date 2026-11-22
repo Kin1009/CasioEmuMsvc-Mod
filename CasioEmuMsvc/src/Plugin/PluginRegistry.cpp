@@ -1,4 +1,5 @@
 #include "PluginRegistry.h"
+#include "PluginApi.h"
 
 // The registry is deliberately GUI-free: everything the shell owns (theme,
 // windows, settings, file dialog, PluginApi factory) is reached through
@@ -11,6 +12,7 @@
 #include "PluginPayloads.h"
 #include "PluginPermissions.h"
 #include "PluginResources.h"
+#include "ScriptRuntime.h"
 
 #include "../../../McpPlugin/json.hpp"
 
@@ -19,6 +21,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <chrono>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <fstream>
@@ -63,6 +66,21 @@ std::string JoinPermissions(const std::vector<std::string>& permissions) {
 		result += permission;
 	}
 	return result;
+}
+
+// Manifest permissions -> ScriptRuntime capability bits.  The runtime gates
+// every host function against this mask; scripts cannot modify it.
+unsigned ScriptPermissionsFor(const Manifest& manifest) {
+	unsigned mask = 0;
+	if (manifest.HasPermission("emulator.read"))
+		mask |= static_cast<unsigned>(ScriptPermission::Read);
+	if (manifest.HasPermission("emulator.write"))
+		mask |= static_cast<unsigned>(ScriptPermission::Write);
+	if (manifest.HasPermission("emulator.inject"))
+		mask |= static_cast<unsigned>(ScriptPermission::Inject);
+	if (manifest.HasPermission("ui.shell"))
+		mask |= static_cast<unsigned>(ScriptPermission::Shell);
+	return mask;
 }
 
 bool HasPluginExtension(const std::string& extension) {
@@ -284,6 +302,15 @@ void PluginRegistry::AddPackage(const std::filesystem::path& file) {
 		// any embedded dylibs so the UI can display them.
 		entry.zipContainer = true;
 		entry.embeddedDylibs = FindEmbeddedDylibs(entry.package.root);
+		// Script plugins are data only: reject any native binary in the ZIP
+		// (tagged or not) so iPadOS installs never depend on dlopen.
+		if (entry.package.manifest.type == PluginType::Script && !entry.embeddedDylibs.empty()) {
+			entry.state = "Error";
+			entry.error = "script.native: script plugins must not contain native binaries";
+			LogLine("[ERROR] " + file.filename().string() + ": " + entry.error);
+			m_entries.push_back(std::move(entry));
+			return;
+		}
 	}
 	if (!entry.package.valid) {
 		// Backward compatibility: a legacy plain-Mach-O .plugin is dlopen'd by
@@ -508,6 +535,13 @@ void PluginRegistry::LoadEntry(PluginEntry& entry) {
 		return;
 	}
 
+	// Data-only script plugins have no native binary and must be compiled/run
+	// by ScriptRuntime instead of the JSON declarative loader below.
+	if (entry.package.manifest.type == PluginType::Script) {
+		LoadScript(entry);
+		return;
+	}
+
 	if (entry.package.manifest.IsNative()) {
 		if (LoadNative(entry))
 			return;
@@ -608,6 +642,116 @@ bool PluginRegistry::LoadDeclarative(PluginEntry& entry) {
 	entry.state = "Loaded";
 	entry.error.clear();
 	LogLine("[SUCCESS] Loaded " + std::string(TypeName(entry.package.manifest.type)) + " plugin " + entry.Id());
+	ApplyDenials(entry);
+	return true;
+}
+
+bool PluginRegistry::LoadScript(PluginEntry& entry) {
+	const Manifest& manifest = entry.package.manifest;
+	std::string source;
+	std::string error;
+	const std::filesystem::path script_path = entry.package.root / manifest.entryPoint;
+	if (!ReadTextFile(script_path, source, error)) {
+		entry.state = "Error";
+		entry.error = error;
+		LogLine("[ERROR] " + entry.Id() + ": " + error);
+		entry.loaded = false;
+		return false;
+	}
+	constexpr std::size_t kMaxSourceBytes = 4ull * 1024ull * 1024ull;
+	if (source.size() > kMaxSourceBytes) {
+		entry.state = "Error";
+		entry.error = "script.compile: source exceeds " + std::to_string(kMaxSourceBytes) + " bytes";
+		LogLine("[ERROR] " + entry.Id() + ": " + entry.error);
+		entry.loaded = false;
+		return false;
+	}
+
+	// Hot reload / retry: drop the previous state and its API facade first.
+	entry.scriptRuntime.reset();
+	if (entry.apiContext) {
+		Host().DestroyApi(static_cast<PluginApi*>(entry.apiContext));
+		entry.apiContext = nullptr;
+	}
+
+	ScriptRuntimeConfig config;
+	config.pluginId = manifest.id;
+	config.engine = manifest.scriptEngine;
+	config.budget = manifest.scriptBudget;
+	config.permissions = ScriptPermissionsFor(manifest);
+
+	// Reuse the existing permission-scoped PluginApi facade where possible so
+	// the read-only host functions return real emulator / debugger data.
+	PluginApi* api = Host().CreateApi(manifest.id, manifest);
+	entry.apiContext = api;
+	IEmulator* emulator = nullptr;
+	IDebugger* debugger = nullptr;
+	IMMU* mmu = nullptr;
+	if (api) {
+		if (manifest.HasPermission("emulator.read") || manifest.HasPermission("emulator.write")) {
+			emulator = api->QueryInterface<IEmulator>();
+			debugger = api->QueryInterface<IDebugger>();
+			mmu = api->QueryInterface<IMMU>();
+		}
+	}
+
+	config.host.log = [this, id = manifest.id](const std::string& text) {
+		LogLine("[script] " + id + ": " + text);
+	};
+	config.host.tick = []() -> std::uint64_t {
+		return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count());
+	};
+	config.host.model = [emulator]() -> std::string {
+		const char* name = emulator ? emulator->GetRunningModelName() : nullptr;
+		return name ? std::string(name) : std::string();
+	};
+	config.host.framebufferSize = [emulator](int& width, int& height, int& pitch) -> bool {
+		const casioemu::ModelInfo* info = emulator ? emulator->ModelDefinition() : nullptr;
+		if (!info || info->screen_width <= 0 || info->screen_height <= 0)
+			return false;
+		width = info->screen_width;
+		height = info->screen_height;
+		pitch = width;
+		return true;
+	};
+	config.host.readRegister = [debugger](const std::string& name, std::uint32_t& value, unsigned& bits) -> bool {
+		return debugger && debugger->ReadRegister(name.c_str(), value, bits);
+	};
+	config.host.readMemory8 = [debugger](std::uint32_t address, std::uint8_t& value) -> bool {
+		if (!debugger)
+			return false;
+		const auto bytes = debugger->ReadMemory(address, 1);
+		if (bytes.size() != 1)
+			return false;
+		value = bytes[0];
+		return true;
+	};
+	config.host.writeMemory8 = [mmu](std::uint32_t address, std::uint8_t value) {
+		if (mmu)
+			mmu->WriteData(address, value);
+	};
+	// Real ScriptWindow creation is Phase 2; for now the request is logged.
+	config.host.addWindow = [this, id = manifest.id](const std::string& title) {
+		LogLine("[script] " + id + ": window request '" + title + "'");
+	};
+
+	entry.scriptRuntime = std::make_shared<ScriptRuntime>(std::move(config));
+	std::string runtime_error;
+	if (!entry.scriptRuntime->Load(source, manifest.entryPoint, runtime_error)) {
+		entry.state = "Error";
+		entry.error = runtime_error;
+		LogLine("[ERROR] " + entry.Id() + ": " + entry.error);
+		entry.scriptRuntime.reset();
+		entry.loaded = false;
+		return false;
+	}
+
+	entry.document = std::move(source);
+	entry.loaded = true;
+	entry.state = "Loaded";
+	entry.error.clear();
+	LogLine("[SUCCESS] Loaded script plugin " + entry.Id() + " (" + manifest.scriptEngine + ")");
 	ApplyDenials(entry);
 	return true;
 }
@@ -828,6 +972,7 @@ void PluginRegistry::HidePluginWindows(PluginEntry& entry) {
 }
 
 void PluginRegistry::ClearRuntimeState(PluginEntry& entry) {
+	entry.scriptRuntime.reset();
 	entry.loaded = false;
 	entry.handle = nullptr;
 	entry.apiContext = nullptr;
@@ -866,6 +1011,15 @@ bool PluginRegistry::UnloadEntry(PluginEntry& entry, bool remove_windows) {
 	PluginApi* api = static_cast<PluginApi*>(entry.apiContext);
 	const bool was_theme = entry.package.valid && entry.package.manifest.type == PluginType::Theme;
 	const bool had_native = handle != nullptr || !entry.nativeHandles.empty();
+	const bool had_script = entry.scriptRuntime != nullptr;
+	if (had_script) {
+		std::string unload_error;
+		if (!entry.scriptRuntime->OnUnload(unload_error) && !unload_error.empty())
+			LogLine("[WARN] " + id + ": on_unload failed: " + unload_error);
+		// Drop the Lua state before the PluginApi facade it captures is destroyed.
+		entry.scriptRuntime.reset();
+		LogLine("[INFO] Unloaded script runtime for " + id);
+	}
 
 	// Remove windows before fPluginUnload so a plugin that deletes its own
 	// windows cannot leave dangling pointers in the host render loop.  At
@@ -1045,7 +1199,10 @@ void PluginRegistry::ReloadDeclarative() {
 		if (entry.package.manifest.type == PluginType::Inject)
 			ClearPluginPayloads(entry.Id());
 		entry.loaded = false;
-		LoadDeclarative(entry);
+		if (entry.package.manifest.type == PluginType::Script)
+			LoadScript(entry); // re-reads main.lua into a fresh sandbox
+		else
+			LoadDeclarative(entry);
 	}
 }
 
@@ -1198,6 +1355,29 @@ bool PluginRegistry::ApplyLayout(PluginEntry& entry, const LayoutActions& action
 }
 
 void PluginRegistry::PumpFrame() {
+	// Script callbacks run with a fresh instruction budget every frame.  An
+	// error is captured into the entry instead of escaping into the GUI loop.
+	const auto now = std::chrono::steady_clock::now();
+	const double dt = m_lastScriptFrame.time_since_epoch().count() == 0
+		? 0.0 : std::chrono::duration<double>(now - m_lastScriptFrame).count();
+	m_lastScriptFrame = now;
+	for (auto& entry : m_entries) {
+		if (entry.removed || !entry.loaded || !entry.scriptRuntime)
+			continue;
+		std::string error;
+		if (!entry.scriptRuntime->OnFrame(dt, error)) {
+			entry.state = "Error";
+			entry.error = error;
+			LogLine("[ERROR] " + entry.Id() + ": " + error);
+		}
+		else if (entry.scriptRuntime->DeniedCount() > 0 && !entry.limited) {
+			entry.limited = true;
+			entry.state = "Loaded (limited)";
+			entry.error = "plugin.permission: a script host call was denied (see log)";
+			LogLine("[WARN] " + entry.Id() + ": " + entry.error);
+		}
+	}
+
 	if (m_activeThemeDocument.empty())
 		return;
 	// The startup font rebuild (ThemeManager::ProcessFontRebuild) assigns the
@@ -1215,6 +1395,19 @@ void PluginRegistry::PumpFrame() {
 	else
 		LogLine("[ERROR] " + m_activeThemeId + ": cannot reapply theme: " + error);
 	m_themeStale = false;
+}
+
+void PluginRegistry::NotifyScriptKey(int ki, int ko, bool down) {
+	for (auto& entry : m_entries) {
+		if (entry.removed || !entry.loaded || !entry.scriptRuntime)
+			continue;
+		std::string error;
+		if (!entry.scriptRuntime->OnKey(ki, ko, down, error)) {
+			entry.state = "Error";
+			entry.error = error;
+			LogLine("[ERROR] " + entry.Id() + ": " + error);
+		}
+	}
 }
 
 void PluginRegistry::ReapplyActiveTheme() {

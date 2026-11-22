@@ -36,7 +36,7 @@
 // e.g. "No native binary for macos-x64".
 //
 // Tags (kept deliberately small and stable):
-//   OS   : macos | linux | windows | android | any
+//   OS   : macos | linux | windows | android | ipados | ios | any
 //   ARCH : x64 | x32 | arm64 | arm64-android | any
 //
 //   * x64            -> 64-bit x86 (AMD64 / Intel64), desktop/laptop
@@ -116,7 +116,7 @@ namespace casioemu::plugin {
 // Known tags and helper constants.
 // ---------------------------------------------------------------------------
 inline constexpr std::string_view kKnownOsTags[] = {
-	"macos", "linux", "windows", "android", "any",
+	"macos", "linux", "windows", "android", "ipados", "ios", "any",
 };
 inline constexpr std::string_view kKnownArchTags[] = {
 	"x64", "x32", "arm64", "arm64-android", "any",
@@ -153,6 +153,10 @@ inline const char* OsTagDescription(std::string_view tag) {
 	if (tag == "linux") return "Linux";
 	if (tag == "windows") return "Microsoft Windows";
 	if (tag == "android") return "Android";
+	// Data-only script plugins are the first type that can legitimately list
+	// these tags: no dlopen/native code is involved on either platform.
+	if (tag == "ipados") return "Apple iPadOS (script plugins only)";
+	if (tag == "ios") return "Apple iOS (script plugins only)";
 	if (tag == "any") return "Any operating system (wildcard)";
 	return "Unknown OS tag";
 }

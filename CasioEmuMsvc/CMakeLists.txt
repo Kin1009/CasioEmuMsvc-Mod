@@ -34,6 +34,16 @@ set(MINIZ_DIR "${THIRD_PARTY_DIR}/miniz")
 set(TINYXML2_DIR "${THIRD_PARTY_DIR}/tinyxml2")
 set(TEMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/temp")
 set(GUI_FONT_SUBSET "${TEMP_DIR}/generated/fonts/CasioEmuGuiCJKSubset.otf")
+
+# Vendored PUC Lua 5.4.8 (repository root) is the in-process engine for
+# data-only `type: script` plugins.  It is compiled into the app at build time
+# with the instruction-budget patch; script plugins contain text only, so no
+# dlopen / JIT is needed and iPadOS/iOS installs remain valid.
+set(LUA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../lua_config_convert/lua-5.4.8")
+if(NOT EXISTS "${LUA_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "Vendored Lua 5.4.8 not found at ${LUA_ROOT}")
+endif()
+add_subdirectory("${LUA_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/lua-5.4.8")
 file(GLOB GUI_FONT_LOCALE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/locales/*.lc")
 
 if(NOT DEFINED CASIOEMU_ONLINE_BUILD_KEY_ID AND DEFINED ENV{CASIOEMU_ONLINE_BUILD_KEY_ID})
@@ -406,6 +416,9 @@ else()
     add_library(${TARGET_NAME} SHARED ${MAIN_SOURCES})
 endif()
 
+# Script runtime: statically linked interpreter (patched vendored Lua).
+target_link_libraries(${TARGET_NAME} PRIVATE lua)
+
 # PlatformTags.h: "macos|linux|windows|android" x
 #                 "x64|x32|arm64|arm64-android|any" as C string literals.
 casioemu_apply_platform_tags(${TARGET_NAME})
@@ -609,6 +622,7 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
 
     add_executable(casioemu_plugin_registry_headless
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/plugin_registry_headless.cpp"
+        "${SOURCE_DIR}/Plugin/ScriptRuntime.cpp"
         "${SOURCE_DIR}/Plugin/PluginRegistry.cpp"
         "${SOURCE_DIR}/Plugin/PluginHost.cpp"
         "${SOURCE_DIR}/Plugin/PluginHostApi.cpp"
@@ -635,7 +649,7 @@ if(CASIOEMU_PLUGIN_TESTS AND NOT CASIOEMU_WEB AND BUILD_EXECUTABLE)
     if(APPLE)
         target_link_options(casioemu_plugin_registry_headless PRIVATE "-Wl,-export_dynamic")
     endif()
-    target_link_libraries(casioemu_plugin_registry_headless PRIVATE Threads::Threads)
+    target_link_libraries(casioemu_plugin_registry_headless PRIVATE Threads::Threads lua)
     add_dependencies(casioemu_plugin_registry_headless
         casioemu_plugin_window_fixture
         casioemu_plugin_badapi_fixture

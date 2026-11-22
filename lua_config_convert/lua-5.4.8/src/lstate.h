@@ -308,6 +308,10 @@ typedef struct global_State {
 */
 struct lua_State {
   CommonHeader;
+  /* PLUGIN SANDBOX PATCH: remaining VM instructions (0 = unlimited).
+     Refilled by the host before every plugin callback; see
+     patches/lua-5.4.8-instruction-budget.patch. */
+  unsigned long long instr_budget;
   lu_byte status;
   lu_byte allowhook;
   unsigned short nci;  /* number of items in 'ci' list */

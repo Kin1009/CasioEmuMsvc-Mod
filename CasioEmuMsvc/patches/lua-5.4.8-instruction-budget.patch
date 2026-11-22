@@ -1,0 +1,59 @@
+# Lua 5.4.8 instruction-budget patch (plugin sandbox, Phase 1)
+#
+# Applies to: lua_config_convert/lua-5.4.8/src/{lvm.c,lstate.h,lua.h}
+# Purpose:    hard, low-overhead termination of runaway plugin scripts (~5-15%
+#             overhead vs the stock debug hook's 2.2-2.5x). Adds an
+#             `instr_budget` field to lua_State, decrements it in vmfetch() and
+#             raises a regular Lua error when it reaches zero. Host sets it
+#             before each plugin entry/frame call via lua_setinstrbudget().
+# Re-apply:   after any Lua version bump, from the repository root:
+#               patch -p1 --forward < CasioEmuMsvc/patches/lua-5.4.8-instruction-budget.patch
+#             (The paths below are relative to lua_config_convert/lua-5.4.8/.)
+# Verified:   scratch benchmark bench/lua-budget-src/, 2026-11-21.
+--- a/src/lvm.c
++++ b/src/lvm.c
+@@ -1142,6 +1142,11 @@
+   if (l_unlikely(trap)) {  /* stack reallocation or hooks? */ \
+     trap = luaG_traceexec(L, pc);  /* handle hooks */ \
+     updatebase(ci);  /* correct stack */ \
++  } \
++  /* PLUGIN SANDBOX PATCH: hard instruction budget (0 = unlimited). */ \
++  if (l_unlikely(L->instr_budget != 0)) { \
++    if (--L->instr_budget == 0) \
++      luaG_runerror(L, "instruction budget exhausted"); \
+   } \
+   i = *(pc++); \
+ }
+@@ -1900,3 +1905,8 @@
+ }
+ 
+ /* }================================================================== */
++
++/* --- plugin sandbox API (see patches/lua-5.4.8-instruction-budget.patch) --- */
++LUA_API void lua_setinstrbudget (lua_State *L, unsigned long long n) {
++  L->instr_budget = n;
++}
+--- a/src/lstate.h
++++ b/src/lstate.h
+@@ -308,6 +308,10 @@
+ */
+ struct lua_State {
+   CommonHeader;
++  /* PLUGIN SANDBOX PATCH: remaining VM instructions (0 = unlimited).
++     Refilled by the host before every plugin callback; see
++     patches/lua-5.4.8-instruction-budget.patch. */
++  unsigned long long instr_budget;
+   lu_byte status;
+   lu_byte allowhook;
+   unsigned short nci;  /* number of items in 'ci' list */
+--- a/src/lua.h
++++ b/src/lua.h
+@@ -466,6 +466,8 @@
+                                                int fidx2, int n2);
+ 
+ LUA_API void (lua_sethook) (lua_State *L, lua_Hook func, int mask, int count);
++/* PLUGIN SANDBOX PATCH: remaining VM instructions for this state (0 = unlimited). */
++LUA_API void (lua_setinstrbudget) (lua_State *L, unsigned long long n);
+ LUA_API lua_Hook (lua_gethook) (lua_State *L);
+ LUA_API int (lua_gethookmask) (lua_State *L);
+ LUA_API int (lua_gethookcount) (lua_State *L);
