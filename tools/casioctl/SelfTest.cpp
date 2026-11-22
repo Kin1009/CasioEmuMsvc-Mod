@@ -22,6 +22,12 @@
 
 namespace casioctl {
 	namespace {
+#ifdef MSG_NOSIGNAL
+		constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+		constexpr int kSendFlags = 0;
+#endif
+
 		class Checker {
 		public:
 			void Check(bool condition, const std::string& name, const std::string& detail = std::string()) {
@@ -129,7 +135,7 @@ namespace casioctl {
 								continue;
 							std::string reply = Handle(line);
 							reply.push_back('\n');
-							(void)!::send(client, reply.data(), reply.size(), 0);
+							(void)!::send(client, reply.data(), reply.size(), kSendFlags);
 						}
 					}
 					::close(client);
@@ -181,6 +187,23 @@ namespace casioctl {
 					result["paused"] = true;
 					result["pc"] = 0x1234;
 					result["model"] = "casioctl selftest";
+					response["ok"] = true;
+					response["result"] = std::move(result);
+					return response.Dump();
+				}
+				if (name == "model") {
+					result["protocol"] = kProtocolName;
+					result["protocol_version"] = kProtocolVersion;
+					result["app"] = kAppName;
+					result["app_version"] = "selftest";
+					result["pid"] = static_cast<int>(::getpid());
+					result["model"] = "casioctl selftest";
+					result["model_path"] = "/selftest/model";
+					result["rom_path"] = "rom.bin";
+					result["hardware"] = "TEST";
+					result["hardware_id"] = 0;
+					result["real_hardware"] = false;
+					result["offscreen_rendering"] = true;
 					response["ok"] = true;
 					response["result"] = std::move(result);
 					return response.Dump();
@@ -293,6 +316,9 @@ namespace casioctl {
 				"reject missing length");
 			checker.Check(!ParseCommandLine(Tokenize("frobnicate", error), parsed, error),
 				"reject unknown command");
+			checker.Check(ParseCommandLine(Tokenize("model", error), parsed, error) &&
+					parsed.command == "model",
+				"parse model");
 			checker.Check(!ParseCommandLine(Tokenize("write 0x100 abc", error), parsed, error),
 				"reject odd-length hex data");
 			checker.Check(!ParseCommandLine(Tokenize("step 0", error), parsed, error),
@@ -485,6 +511,16 @@ namespace casioctl {
 				"status request round trip", error);
 			result = response.Find("result");
 			checker.Check(result && ArgInt(*result, "pc") == 0x1234, "status decodes", error);
+
+			checker.Check(client.Request("model", Json::Object(), response, error),
+				"model request round trip", error);
+			result = response.Find("result");
+			checker.Check(result && result->Find("model") &&
+					result->Find("model")->AsString() == "casioctl selftest" &&
+					result->Find("hardware") && result->Find("hardware")->AsString() == "TEST",
+				"model decodes", error);
+			checker.Check(result && FormatResult("model", *result).find("casioctl selftest") != std::string::npos,
+				"model renders", error);
 
 			// Malformed JSON must come back as a plain protocol error.
 			std::string raw_error;

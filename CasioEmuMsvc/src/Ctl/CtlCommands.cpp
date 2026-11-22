@@ -463,6 +463,7 @@ namespace casioctl {
 		Json BuildCapabilities(casioemu::Emulator& emulator) {
 			Json capabilities = Json::Array();
 			const char* commands[] = {
+				"hello", "model", "shutdown",
 				"status", "pause", "resume", "reset", "step", "step.over", "step.out",
 				"regs", "reg.get", "reg.set",
 				"read", "write", "read-code", "read-rom", "write-rom", "write-code", "disasm",
@@ -542,6 +543,27 @@ namespace casioctl {
 			emulator.RequestQuit();
 			Json result = Json::Object();
 			result["quitting"] = true;
+			outcome.result = std::move(result);
+			return outcome;
+		}
+
+		if (command == "model") {
+			// Identity only. Deliberately does NOT call RequireDebugger(): a
+			// headless session without a loaded debugger plugin can still be
+			// identified, whereas "status" throws debugger-unavailable there.
+			Json result = Json::Object();
+			result["protocol"] = kProtocolName;
+			result["protocol_version"] = kProtocolVersion;
+			result["app"] = kAppName;
+			result["app_version"] = EMULATOR_VERSION;
+			result["pid"] = static_cast<int>(::getpid());
+			result["model"] = emulator.ModelDefinition.model_name;
+			result["model_path"] = emulator.model_path;
+			result["rom_path"] = emulator.ModelDefinition.rom_path;
+			result["hardware"] = casioemu::HardwareDisplayName(emulator.hardware_id);
+			result["hardware_id"] = static_cast<int>(emulator.hardware_id);
+			result["real_hardware"] = emulator.ModelDefinition.real_hardware;
+			result["offscreen_rendering"] = emulator.offscreen_rendering;
 			outcome.result = std::move(result);
 			return outcome;
 		}

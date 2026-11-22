@@ -9,7 +9,7 @@
 
 #include "Config.hpp"
 
-#if defined(__APPLE__) && !defined(CASIOEMU_WEB) && !defined(__EMSCRIPTEN__) && !defined(CASIOEMU_CORE_WEB)
+#if !defined(_WIN32) && !defined(CASIOEMU_WEB) && !defined(__EMSCRIPTEN__) && !defined(CASIOEMU_CORE_WEB)
 
 #include <SDL.h>
 #include <cstdlib>
