@@ -11,10 +11,21 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-TOOL_DIR="${CASIO_TOOLCHAIN_DIR:-/Volumes/Code/casio-tools/toolchains}"
-LOG_DIR="${CASIO_BUILD_LOG_DIR:-/Volumes/Code/casio-tools/temp/build-4target-logs}"
+
+# Toolchains are installed outside the checkout.  The historical macOS
+# location is used when present; other hosts fall back under $HOME.
+DEFAULT_TOOL_DIR="/Volumes/Code/casio-tools/toolchains"
+[ -d "$DEFAULT_TOOL_DIR" ] || DEFAULT_TOOL_DIR="${HOME}/casio-tools/toolchains"
+TOOL_DIR="${CASIO_TOOLCHAIN_DIR:-$DEFAULT_TOOL_DIR}"
+
+DEFAULT_LOG_DIR="/Volumes/Code/casio-tools/temp/build-4target-logs"
+[ -d "$(dirname "$DEFAULT_LOG_DIR")" ] || DEFAULT_LOG_DIR="$ROOT_DIR/build-logs"
+LOG_DIR="${CASIO_BUILD_LOG_DIR:-$DEFAULT_LOG_DIR}"
 JOBS="${CASIO_BUILD_JOBS:-4}"
-mkdir -p "$LOG_DIR"
+if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+    LOG_DIR="$ROOT_DIR/build-logs"
+    mkdir -p "$LOG_DIR"
+fi
 
 CCACHE_BIN="${CCACHE_BIN:-$(command -v ccache || true)}"
 # Keeping two arguments even when ccache is absent avoids empty-array expansion

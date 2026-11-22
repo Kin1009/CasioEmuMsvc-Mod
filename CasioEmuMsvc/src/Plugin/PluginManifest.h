@@ -56,7 +56,12 @@ struct Manifest {
 	unsigned long long scriptBudget = kDefaultScriptBudget;
 
 	[[nodiscard]] bool HasPermission(const std::string& permission) const;
-	[[nodiscard]] bool IsNative() const { return !nativeEntry.empty(); }
+	// A plugin that declares platform-tagged native binaries is native even
+	// when it has no single legacy nativeEntry: LoadEntry uses this to route
+	// it through LoadNative instead of the declarative loader.
+	[[nodiscard]] bool IsNative() const {
+		return !nativeEntry.empty() || HasPlatformTaggedBinaries();
+	}
 	[[nodiscard]] bool IsScript() const { return type == PluginType::Script; }
 	[[nodiscard]] bool HasOsTag(const std::string& tag) const {
 		return std::find(osTags.begin(), osTags.end(), tag) != osTags.end();

@@ -130,6 +130,12 @@ int main() {
 	result = ParseManifest(ManifestText("com.example.tool", "tool", "[\"ui.shell\"]", "lib/example.dylib"));
 	Check(result.ok && result.manifest.IsNative(), "native tool parses");
 
+	// `arch` is additive: a native architecture plugin keeps ui.shell for its UI.
+	result = ParseManifest(ManifestText("com.example.arch", "tool",
+		"[\"ui.shell\", \"arch\"]", "lib/example.dylib"));
+	Check(result.ok && result.manifest.HasPermission("arch") &&
+		result.manifest.HasPermission("ui.shell"), "arch permission parses additively");
+
 	result = ParseManifest(ManifestText("NotAnId", "theme", "[]"));
 	Check(!result.ok && result.code == "manifest.id", "invalid id rejected");
 	result = ParseManifest(ManifestText("com.example.bad", "theme", "[\"root\"]"));
@@ -162,6 +168,20 @@ int main() {
 
 		const PermissionSet process({ "process" });
 		Check(process.Allows(Capability::Native), "process -> native");
+
+		// Arch is additive and distinct: it grants Arch (+ Native) but never
+		// substitutes for the UI/browser permissions, and ui.shell alone must
+		// not grant it.
+		const PermissionSet arch({ "arch", "ui.shell" });
+		Check(arch.Allows(Capability::Arch), "arch -> arch");
+		Check(arch.Allows(Capability::Native), "arch -> native");
+		Check(arch.Allows(Capability::Shell), "arch + ui.shell keeps shell");
+		Check(!arch.Allows(Capability::Inject), "arch does not grant inject");
+		Check(!shell.Allows(Capability::Arch), "ui.shell alone does not grant arch");
+		Check(std::string(CapabilityName(Capability::Arch)) == "arch", "arch capability name");
+		const std::string arch_denial = RecordPermissionDenial("com.example.noarch", Capability::Arch, "test");
+		Check(arch_denial.find("'arch'") != std::string::npos, "arch denial names the permission");
+		Check(TakePermissionDenials("com.example.noarch").size() == 1, "arch denial recorded");
 
 		const PermissionSet read({ "emulator.read" });
 		Check(read.Allows(Capability::EmulatorRead), "emulator.read -> read");

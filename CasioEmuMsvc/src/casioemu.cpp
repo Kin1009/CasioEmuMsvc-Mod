@@ -652,7 +652,10 @@ for (;;) {
 				if (shot_frame >= wanted) {
 					const bool saved = casioemu::shot::SaveRendererPng(emulator.renderer, shot);
 					const std::string report = std::string(shot) + ".layout.txt";
-					const bool layout_ok = casioemu::shell::WriteLayoutReport(report);
+					// WriteLayoutReport() reads shell/ImGui state that only exists
+					// after test_gui(). A headless no_dbg run has no GUI, so skip
+					// the report instead of crashing in WriteLayoutReport().
+					const bool layout_ok = guiCreated && casioemu::shell::WriteLayoutReport(report);
 					std::printf("[shot] %s shell=%s layout=%s\n", shot,
 						saved ? "ok" : "failed", layout_ok ? "PASS" : "FAIL");
 					if (std::getenv("CASIOEMU_SAVE_STATE"))

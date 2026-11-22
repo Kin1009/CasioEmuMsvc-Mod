@@ -44,8 +44,11 @@ function(casioemu_detect_platform OUT_OS OUT_ARCH)
     string(TOLOWER "${_proc}" _proc_lc)
 
     if(_os STREQUAL "android")
-        # Android has its own ABI vocabulary; arm64 gets a dedicated tag.
-        if(ANDROID_ABI MATCHES "arm64-v8a")
+        # An explicit toolchain hint wins; otherwise Android has its own ABI
+        # vocabulary and arm64 gets a dedicated tag.
+        if(CASIOEMU_TARGET_ARCH)
+            set(_arch "${CASIOEMU_TARGET_ARCH}")
+        elseif(ANDROID_ABI MATCHES "arm64-v8a")
             set(_arch "arm64-android")
         elseif(ANDROID_ABI MATCHES "armeabi-v7a")
             set(_arch "any")          # 32-bit ARM has no dedicated tag

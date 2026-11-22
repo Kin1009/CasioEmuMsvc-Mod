@@ -46,15 +46,17 @@ MANIFEST = {
     "min_host": "2.1.0",
     "platforms": ["macos"],
     "type": "tool",
-    # ADDITIVE permissions: ui.shell stays because it provides the package UI
-    # (the Reboot / diag buttons, tabs and ImGui context).  `arch` is a NEW,
-    # separate permission marking this plugin as an architecture/emulation
-    # provider; it grants Capability::Arch + Native and lets the permission
-    # facade allow RegisterArchitectureProvider / the architecture registry
-    # QueryInterface.  It does NOT replace ui.shell or any other permission.
-    # We do NOT declare emulator.read/emulator.write: the plugin uses the direct
-    # cg100_* C ABI exports, not the gated PluginApi emulator capabilities.
-    "permissions": ["ui.shell", "arch"],
+    # ui.shell is necessary AND sufficient for this core.  Per
+    # PluginPermissions.cpp it grants Capability::Shell + Window + Theme +
+    # Native: Window is needed by AddWindow/GetImGuiContext, and Native is what
+    # PluginRegistry checks when dlopen'ing nativeEntry.  The arch provider is
+    # registered through fPluginLoadArch, which runs on the host's trusted,
+    # ungated bootstrap path, so Capability::Arch is NOT required here.
+    # Do NOT add "arch": older target hosts do not know that permission and
+    # reject the manifest with "unknown permission 'arch'".  Do NOT add
+    # emulator.read/emulator.write either: the plugin uses the direct cg100_*
+    # C ABI exports, not the gated PluginApi emulator capabilities.
+    "permissions": ["ui.shell"],
     "entry_point": "assets/info.json",
     "native_entry": "CG100SH4.plugin",
     "assets": ["assets/info.json"],
